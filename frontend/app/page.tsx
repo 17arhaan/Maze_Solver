@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Loader2, Play, RotateCcw, TrendingUp } from "lucide-react"
+import { Loader2, Play, RotateCcw, TrendingUp, Shuffle } from "lucide-react"
 
 type Algorithm = "monte_carlo" | "sarsa" | "q_learning"
 
@@ -52,6 +52,9 @@ export default function MazeSolver() {
     gamma: false,
     epsilon: false
   })
+  const [mazeComplexity, setMazeComplexity] = useState<"easy" | "medium" | "hard">("medium")
+  const [pathLength, setPathLength] = useState<number>(0)
+  const [nextDifficulty, setNextDifficulty] = useState<"easy" | "medium" | "hard">("hard")
 
   useEffect(() => {
     const initialMaze = [
@@ -74,7 +77,230 @@ export default function MazeSolver() {
     ]
 
     setMaze(initialMaze)
+    setMazeComplexity("medium")
+    setPathLength(estimatePathLength(initialMaze))
   }, [])
+
+  const estimatePathLength = (mazeGrid: number[][]) => {
+    // Simple BFS to find shortest path length
+    const queue: Array<[number, number, number]> = [[0, 1, 0]]
+    const visited = new Set<string>()
+    visited.add("0,1")
+    
+    const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
+    
+    while (queue.length > 0) {
+      const [row, col, dist] = queue.shift()!
+      
+      if (row === 15 && col === 15) {
+        return dist
+      }
+      
+      for (const [dr, dc] of directions) {
+        const newRow = row + dr
+        const newCol = col + dc
+        const key = `${newRow},${newCol}`
+        
+        if (newRow >= 0 && newRow < 16 && newCol >= 0 && newCol < 17 &&
+            !visited.has(key) && mazeGrid[newRow]?.[newCol] === 1) {
+          visited.add(key)
+          queue.push([newRow, newCol, dist + 1])
+        }
+      }
+    }
+    
+    return 0 // No path found
+  }
+
+  const generateRandomMaze = () => {
+    // Cycle through difficulties: medium → hard → easy → medium → hard → ...
+    const targetComplexity = nextDifficulty
+    
+    let attempts = 0
+    let maxAttempts = 50
+    let generatedMaze: number[][] = []
+    let pathLen = 0
+    
+    // Keep generating until we get the target complexity
+    while (attempts < maxAttempts) {
+      const rows = 16
+      const cols = 17
+      const newMaze: number[][] = Array(rows).fill(0).map(() => Array(cols).fill(0))
+      
+      // Start with all walls
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          newMaze[r][c] = 0
+        }
+      }
+      
+      // Carve paths using recursive backtracking DFS
+      const visited = new Set<string>()
+      
+      const carve = (row: number, col: number) => {
+        const key = `${row},${col}`
+        visited.add(key)
+        newMaze[row][col] = 1
+        
+        // Get random direction order
+        const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]]
+        for (let i = directions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[directions[i], directions[j]] = [directions[j], directions[i]]
+        }
+        
+        for (const [dr, dc] of directions) {
+          const newRow = row + dr
+          const newCol = col + dc
+          const newKey = `${newRow},${newCol}`
+          
+          if (newRow > 0 && newRow < rows - 1 && newCol > 0 && newCol < cols - 1 && !visited.has(newKey)) {
+            // Carve through the wall between
+            newMaze[row + dr / 2][col + dc / 2] = 1
+            carve(newRow, newCol)
+          }
+        }
+      }
+      
+      // Start carving from (1, 1)
+      carve(1, 1)
+      
+      // Ensure start and goal are accessible
+      newMaze[0][1] = 1
+      newMaze[15][15] = 1
+      
+      // Add additional paths based on target difficulty
+      let additionalPathsCount = 0
+      if (targetComplexity === "easy") {
+        additionalPathsCount = Math.floor(Math.random() * 12) + 18 // 18-30 extra paths (more open)
+      } else if (targetComplexity === "medium") {
+        additionalPathsCount = Math.floor(Math.random() * 10) + 10 // 10-20 extra paths
+      } else {
+        additionalPathsCount = Math.floor(Math.random() * 8) + 3  // 3-10 extra paths (more walls)
+      }
+      
+      for (let i = 0; i < additionalPathsCount; i++) {
+        const r = Math.floor(Math.random() * (rows - 2)) + 1
+        const c = Math.floor(Math.random() * (cols - 2)) + 1
+        if (newMaze[r][c] === 0) {
+          const neighbors = [
+            newMaze[r-1]?.[c],
+            newMaze[r+1]?.[c],
+            newMaze[r]?.[c-1],
+            newMaze[r]?.[c+1]
+          ].filter(n => n === 1).length
+          
+          if (neighbors >= 1 && neighbors <= 2) {
+            newMaze[r][c] = 1
+          }
+        }
+      }
+      
+      // Calculate path length
+      pathLen = estimatePathLength(newMaze)
+      
+      // Check if this maze matches our target complexity
+      let achievedComplexity: "easy" | "medium" | "hard"
+      if (pathLen < 30) achievedComplexity = "easy"
+      else if (pathLen > 50) achievedComplexity = "hard"
+      else achievedComplexity = "medium"
+      
+      // Make sure path exists (pathLen > 0)
+      if (pathLen === 0) {
+        attempts++
+        continue
+      }
+      
+      // If we hit the target complexity (or close enough), use this maze
+      if (achievedComplexity === targetComplexity || attempts > 30) {
+        generatedMaze = newMaze
+        break
+      }
+      
+      attempts++
+    }
+    
+    // If we couldn't generate exact complexity, create a guaranteed valid maze
+    if (generatedMaze.length === 0) {
+      const rows = 16
+      const cols = 17
+      generatedMaze = Array(rows).fill(0).map(() => Array(cols).fill(0))
+      
+      // Always create a guaranteed L-shaped path from start to goal
+      // Vertical corridor on column 1
+      for (let r = 0; r < rows; r++) {
+        generatedMaze[r][1] = 1
+      }
+      // Horizontal corridor on row 15
+      for (let c = 1; c <= 15; c++) {
+        generatedMaze[15][c] = 1
+      }
+      
+      // Add complexity based on target
+      if (targetComplexity === "easy") {
+        // Add many horizontal and vertical corridors
+        for (let r = 2; r < rows - 1; r += 3) {
+          for (let c = 3; c < cols - 2; c++) {
+            if (Math.random() < 0.6) generatedMaze[r][c] = 1
+          }
+        }
+        for (let c = 3; c < cols - 1; c += 3) {
+          for (let r = 2; r < rows - 2; r++) {
+            if (Math.random() < 0.6) generatedMaze[r][c] = 1
+          }
+        }
+      } else if (targetComplexity === "medium") {
+        // Add some corridors
+        for (let r = 3; r < rows - 1; r += 4) {
+          for (let c = 3; c < cols - 2; c += 2) {
+            if (Math.random() < 0.5) generatedMaze[r][c] = 1
+          }
+        }
+      } else {
+        // Hard: minimal extra paths
+        for (let r = 4; r < rows - 1; r += 5) {
+          for (let c = 4; c < cols - 2; c += 3) {
+            if (Math.random() < 0.3) generatedMaze[r][c] = 1
+          }
+        }
+      }
+      
+      // Ensure start and goal
+      generatedMaze[0][1] = 1
+      generatedMaze[15][15] = 1
+      
+      pathLen = estimatePathLength(generatedMaze)
+    }
+    
+    // Determine actual complexity
+    let actualComplexity: "easy" | "medium" | "hard"
+    if (pathLen < 30) actualComplexity = "easy"
+    else if (pathLen > 50) actualComplexity = "hard"
+    else actualComplexity = "medium"
+    
+    setMaze(generatedMaze)
+    setMazeComplexity(actualComplexity)
+    setPathLength(pathLen)
+    
+    // Cycle to next difficulty
+    if (targetComplexity === "easy") setNextDifficulty("medium")
+    else if (targetComplexity === "medium") setNextDifficulty("hard")
+    else setNextDifficulty("easy")
+    
+    // Reset simulation state
+    setAgentPath([])
+    setAgentPosition(null)
+    setGoalReached(false)
+    setSimulationFailed(false)
+    setFailureReason("")
+    
+    // Add log with cycle info
+    if (pathLen > 0) {
+      setTrainingLogs(prev => [...prev, `🎲 Generated ${actualComplexity.toUpperCase()} maze (path: ${pathLen} steps) • Next: ${nextDifficulty === "easy" ? "EASY" : nextDifficulty === "medium" ? "MEDIUM" : "HARD"}`])
+    } else {
+      setTrainingLogs(prev => [...prev, `⚠️ Failed to generate ${targetComplexity.toUpperCase()} maze - using fallback`])
+    }
+  }
 
   const startTraining = async () => {
     // Validate inputs
@@ -102,6 +328,9 @@ export default function MazeSolver() {
       setTrainingLogs(prev => [...prev, `🚀 Starting training with ${algorithm}...`])
       setTrainingLogs(prev => [...prev, `📊 Episodes: ${episodes}, α: ${alpha}, γ: ${gamma}, ε: ${epsilon}`])
 
+      // Flatten maze for backend (convert 2D to 1D array)
+      const flatMaze = maze.flat()
+      
       const response = await fetch("http://localhost:8000/train", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,6 +341,9 @@ export default function MazeSolver() {
           gamma,
           epsilon,
           max_steps: 200,
+          maze: flatMaze,
+          rows: 16,
+          cols: 17
         }),
       })
 
@@ -291,12 +523,17 @@ export default function MazeSolver() {
       if (maze[newRow]?.[newCol] === 0) {
         console.log("Hit wall at:", newRow, newCol)
         setSimulationFailed(true)
+        
+        // Environment-aware suggestions
+        const minEpisodes = mazeComplexity === "hard" ? 2000 : mazeComplexity === "medium" ? 1000 : 500
+        const suggestedGamma = mazeComplexity === "hard" ? 0.99 : 0.95
+        
         if (gamma < 0.9) {
-          setFailureReason(`Gamma (${gamma}) is too low - agent can't plan ahead. Increase gamma to 0.95-0.99 for better pathfinding.`)
-        } else if (episodes < 500) {
-          setFailureReason(`Only ${episodes} episodes - not enough training. Increase to 1000+ episodes for complete policy learning.`)
+          setFailureReason(`Gamma (${gamma}) is too low for this ${mazeComplexity} maze (path: ${pathLength} steps). Increase to ${suggestedGamma} for better long-term planning.`)
+        } else if (episodes < minEpisodes) {
+          setFailureReason(`Only ${episodes} episodes for ${mazeComplexity} maze - not enough training. This maze needs ${minEpisodes}+ episodes for complete learning.`)
         } else {
-          setFailureReason("Agent hit a wall - policy needs more exploration. Try increasing epsilon to 0.15 or training longer.")
+          setFailureReason(`Agent hit a wall in ${mazeComplexity} maze. Try epsilon=0.15, gamma=${suggestedGamma}, and ${minEpisodes}+ episodes.`)
         }
         setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent hit a wall at (${newRow}, ${newCol})`])
         setTrainingLogs(prev => [...prev, `💡 Policy is incomplete - needs more training`])
@@ -309,14 +546,18 @@ export default function MazeSolver() {
       if (path.some(([r, c]) => r === newRow && c === newCol)) {
         console.log("Loop detected at:", newRow, newCol)
         setSimulationFailed(true)
+        
+        // Environment-aware suggestions
+        const minEpisodes = mazeComplexity === "hard" ? 2000 : mazeComplexity === "medium" ? 1000 : 500
+        
         if (alpha > 0.7) {
-          setFailureReason(`Alpha (${alpha}) is too high - learning is unstable. Reduce alpha to 0.2-0.3 for stable convergence.`)
+          setFailureReason(`Alpha (${alpha}) is too high - learning is unstable. Reduce to 0.2-0.3 and train for ${minEpisodes}+ episodes on this ${mazeComplexity} maze.`)
         } else if (gamma < 0.9) {
-          setFailureReason(`Gamma (${gamma}) is too low - agent keeps looping. Increase gamma to 0.99 to value long-term rewards.`)
-        } else if (episodes < 500) {
-          setFailureReason(`Only ${episodes} episodes - agent didn't learn to escape loops. Train for 1000+ episodes.`)
+          setFailureReason(`Gamma (${gamma}) is too low for ${mazeComplexity} maze - agent can't plan ${pathLength}-step path. Increase gamma to 0.99.`)
+        } else if (episodes < minEpisodes) {
+          setFailureReason(`${episodes} episodes insufficient for ${mazeComplexity} maze (${pathLength}-step solution). Train for ${minEpisodes}+ episodes.`)
         } else {
-          setFailureReason("Agent stuck in a loop - policy is suboptimal. Try alpha=0.3, gamma=0.99, epsilon=0.1, episodes=1000.")
+          setFailureReason(`Loop in ${mazeComplexity} maze - try alpha=0.3, gamma=0.99, epsilon=0.1, episodes=${minEpisodes}.`)
         }
         setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent got stuck in a loop (poor policy)`])
         setTrainingLogs(prev => [...prev, `💡 Try training with more episodes or better hyperparameters`])
@@ -338,14 +579,19 @@ export default function MazeSolver() {
     
     console.log("Max steps reached")
     setSimulationFailed(true)
+    
+    // Environment-aware suggestions
+    const minEpisodes = mazeComplexity === "hard" ? 2000 : mazeComplexity === "medium" ? 1000 : 500
+    const pathEfficiency = (pathLength / 200) * 100
+    
     if (epsilon > 0.3) {
-      setFailureReason(`Epsilon (${epsilon}) is too high - too much exploration during training. Reduce epsilon to 0.1-0.15 for better exploitation.`)
+      setFailureReason(`Epsilon (${epsilon}) too high for ${mazeComplexity} maze. Reduce to 0.1 and train ${minEpisodes}+ episodes.`)
     } else if (gamma < 0.9) {
-      setFailureReason(`Gamma (${gamma}) is too low - agent takes inefficient paths. Increase gamma to 0.99 for optimal long-term planning.`)
-    } else if (episodes < 500) {
-      setFailureReason(`Only ${episodes} episodes - path is inefficient. Train for 1000+ episodes for optimal policy.`)
+      setFailureReason(`Gamma (${gamma}) too low for ${pathLength}-step solution. Increase to 0.99 for this ${mazeComplexity} maze.`)
+    } else if (episodes < minEpisodes) {
+      setFailureReason(`${episodes} episodes not enough for ${mazeComplexity} maze. This ${pathLength}-step path needs ${minEpisodes}+ episodes.`)
     } else {
-      setFailureReason("Path is too long - policy is suboptimal. Try alpha=0.3, gamma=0.99, epsilon=0.1, episodes=1000+.")
+      setFailureReason(`Inefficient path in ${mazeComplexity} maze (optimal: ${pathLength} steps). Try alpha=0.3, gamma=0.99, episodes=${minEpisodes}.`)
     }
     setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent couldn't reach goal in 200 steps`])
     setTrainingLogs(prev => [...prev, `💡 Policy is suboptimal - consider retraining with better hyperparameters`])
@@ -734,26 +980,40 @@ export default function MazeSolver() {
                 </div>
               </Card>
             )}
-
-            {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
-              <Card className="p-3 bg-white border-gray-300">
-                <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Reward Curve
-                </h2>
-                <SimpleRewardChart 
-                  rewards={trainingStatus.rewards} 
-                  totalEpisodes={trainingStatus.total_episodes}
-                />
-              </Card>
-            )}
           </div>
 
           <div className="space-y-3">
             <Card className="p-3 bg-white border-gray-300">
-              <h2 className="text-center text-xl font-semibold font-sans text-black leading-7 mb-2 bg-gradient-to-br from-gray-50 to-gray-100 py-2 px-3 rounded-lg shadow-sm">
-                Agent&#39;s Environment [ 16 * 17 ]
-              </h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-semibold font-sans text-black leading-7 bg-gradient-to-br from-gray-50 to-gray-100 py-2 px-3 rounded-lg shadow-sm flex-1 text-center">
+                  Agent&#39;s Environment [ 16 * 17 ]
+                </h2>
+                <Button
+                  onClick={generateRandomMaze}
+                  variant="outline"
+                  size="sm"
+                  className="ml-2 border-purple-300 hover:bg-purple-50 text-purple-700 hover:text-purple-800 flex items-center gap-1"
+                  disabled={isAnimating || trainingStatus.status === "training"}
+                  title={`Generate ${nextDifficulty.toUpperCase()} maze`}
+                >
+                  <Shuffle className="h-4 w-4" />
+                  <span className="text-xs font-bold">
+                    {nextDifficulty === "easy" ? "E" : nextDifficulty === "medium" ? "M" : "H"}
+                  </span>
+                </Button>
+              </div>
+              
+              {pathLength > 0 && (
+                <div className="mb-2 text-center">
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    mazeComplexity === "easy" ? "bg-green-100 text-green-700" :
+                    mazeComplexity === "medium" ? "bg-yellow-100 text-yellow-700" :
+                    "bg-red-100 text-red-700"
+                  }`}>
+                    {mazeComplexity.toUpperCase()} • Shortest Path: {pathLength} steps
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-17 gap-1 bg-gradient-to-br from-gray-100 to-gray-200 p-3 rounded-xl shadow-inner">
                 {maze.map((row, rowIndex) =>
@@ -822,6 +1082,19 @@ export default function MazeSolver() {
                     {goalReached ? ' ✨' : simulationFailed ? ' - retrain recommended' : ''}
                   </p>
                 )}
+              </Card>
+            )}
+
+            {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
+              <Card className="p-3 bg-white border-gray-300">
+                <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Reward Curve
+                </h2>
+                <SimpleRewardChart 
+                  rewards={trainingStatus.rewards} 
+                  totalEpisodes={trainingStatus.total_episodes}
+                />
               </Card>
             )}
           </div>

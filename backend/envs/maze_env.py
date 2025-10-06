@@ -35,6 +35,10 @@ class MazeEnv:
         else:
             assert len(grid_flat) == rows * cols, "grid_flat length mismatch"
             self.grid = np.array(grid_flat, dtype=int)
+            # Set start and goal for custom maze
+            self.grid[0 * cols + 1] = 2  # start at (0, 1)
+            self.grid[15 * cols + 15] = 3  # goal at (15, 15)
+        
         # find start and goal
         starts = np.where(self.grid == 2)[0]
         goals = np.where(self.grid == 3)[0]

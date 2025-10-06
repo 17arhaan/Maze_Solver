@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Loader2, Play, RotateCcw, TrendingUp, AlertCircle, CheckCircle, XCircle } from "lucide-react"
+import { Loader2, Play, RotateCcw, TrendingUp } from "lucide-react"
 
 type Algorithm = "monte_carlo" | "sarsa" | "q_learning"
 
@@ -44,19 +44,14 @@ export default function MazeSolver() {
   const [isAnimating, setIsAnimating] = useState(false)
   const [goalReached, setGoalReached] = useState(false)
   const [simulationFailed, setSimulationFailed] = useState(false)
+  const [failureReason, setFailureReason] = useState<string>("")
   const [trainingLogs, setTrainingLogs] = useState<string[]>([])
-  const [showFailureDialog, setShowFailureDialog] = useState(false)
-  const [failureAnalysis, setFailureAnalysis] = useState<{
-    reason: string
-    problems: string[]
-    suggestions: {
-      episodes: number
-      alpha: number
-      gamma: number
-      epsilon: number
-    }
-    explanation: string
-  } | null>(null)
+  const [validationErrors, setValidationErrors] = useState({
+    episodes: false,
+    alpha: false,
+    gamma: false,
+    epsilon: false
+  })
 
   useEffect(() => {
     const initialMaze = [
@@ -82,6 +77,22 @@ export default function MazeSolver() {
   }, [])
 
   const startTraining = async () => {
+    // Validate inputs
+    const errors = {
+      episodes: episodes < 1 || episodes > 10000,
+      alpha: alpha < 0.01 || alpha > 1.0,
+      gamma: gamma < 0.5 || gamma > 1.0,
+      epsilon: epsilon < 0.0 || epsilon > 1.0
+    }
+    
+    setValidationErrors(errors)
+    
+    // If any validation error, don't start training
+    if (errors.episodes || errors.alpha || errors.gamma || errors.epsilon) {
+      setTrainingLogs(prev => [...prev, `❌ Invalid hyperparameters - please check highlighted fields`])
+      return
+    }
+    
     try {
       setTrainingStatus({ status: "training" })
       setIsPolling(true)
@@ -173,11 +184,6 @@ export default function MazeSolver() {
         const finalSuccessRate = data.success_rate !== null ? (data.success_rate * 100).toFixed(1) : '0.0'
         setTrainingLogs(prev => [...prev, `🎉 Training completed! Final success rate: ${finalSuccessRate}%`])
         setTrainingLogs(prev => [...prev, `✨ Policy learned and ready for simulation!`])
-        
-        // Check if training failed (low success rate)
-        if (data.success_rate !== null && data.success_rate < 0.7) {
-          analyzeFailure(data.success_rate, data.avg_reward)
-        }
       }
       
       setTrainingStatus(frontendStatus)
@@ -187,89 +193,6 @@ export default function MazeSolver() {
       }
     } catch (error) {
       console.error("Failed to check status:", error)
-    }
-  }
-
-  const analyzeFailure = (successRate: number, avgReward: number | null) => {
-    const problems: string[] = []
-    let mainReason = ""
-    
-    // Analyze each hyperparameter
-    if (gamma < 0.9) {
-      problems.push(`Gamma (${gamma}) is too low - agent is too short-sighted to plan long paths`)
-      mainReason = "Agent couldn't plan ahead to reach distant goal"
-    }
-    
-    if (alpha > 0.7) {
-      problems.push(`Alpha (${alpha}) is too high - learning is too unstable`)
-      if (!mainReason) mainReason = "Learning was too unstable to converge"
-    }
-    
-    if (alpha < 0.1) {
-      problems.push(`Alpha (${alpha}) is too low - learning is too slow for ${episodes} episodes`)
-      if (!mainReason) mainReason = "Learning rate too slow for given episodes"
-    }
-    
-    if (epsilon > 0.4) {
-      problems.push(`Epsilon (${epsilon}) is too high - too much random exploration, not enough exploitation`)
-      if (!mainReason) mainReason = "Too much exploration prevented learning"
-    }
-    
-    if (episodes < 300) {
-      problems.push(`Episodes (${episodes}) are too few - agent needs more training time`)
-      if (!mainReason) mainReason = "Not enough training episodes"
-    }
-    
-    if (successRate < 0.3 && avgReward && avgReward < -5) {
-      problems.push("Agent is hitting walls frequently - gamma or episodes too low")
-      if (!mainReason) mainReason = "Agent never learned to avoid walls"
-    }
-    
-    // Default reason if no specific issue detected
-    if (!mainReason) {
-      mainReason = "Suboptimal hyperparameter combination"
-    }
-    
-    // Generate optimal suggestions based on what went wrong
-    let suggestedEpisodes = episodes
-    let suggestedAlpha = alpha
-    let suggestedGamma = gamma
-    let suggestedEpsilon = epsilon
-    
-    if (gamma < 0.9) suggestedGamma = 0.99
-    if (alpha > 0.7) suggestedAlpha = 0.3
-    if (alpha < 0.1) suggestedAlpha = 0.3
-    if (epsilon > 0.4) suggestedEpsilon = 0.1
-    if (episodes < 300) suggestedEpisodes = 1000
-    
-    // Ensure episodes are sufficient
-    if (suggestedEpisodes < 500) suggestedEpisodes = 1000
-    
-    const explanation = `With success rate of ${(successRate * 100).toFixed(1)}%, the agent failed to learn an effective policy. ${mainReason}. The suggested values are proven to work well for this maze complexity.`
-    
-    setFailureAnalysis({
-      reason: mainReason,
-      problems,
-      suggestions: {
-        episodes: suggestedEpisodes,
-        alpha: suggestedAlpha,
-        gamma: suggestedGamma,
-        epsilon: suggestedEpsilon
-      },
-      explanation
-    })
-    
-    setShowFailureDialog(true)
-  }
-
-  const applyOptimalSettings = () => {
-    if (failureAnalysis) {
-      setEpisodes(failureAnalysis.suggestions.episodes)
-      setAlpha(failureAnalysis.suggestions.alpha)
-      setGamma(failureAnalysis.suggestions.gamma)
-      setEpsilon(failureAnalysis.suggestions.epsilon)
-      setShowFailureDialog(false)
-      setTrainingLogs(prev => [...prev, `⚙️ Applied optimal settings: Episodes=${failureAnalysis.suggestions.episodes}, α=${failureAnalysis.suggestions.alpha}, γ=${failureAnalysis.suggestions.gamma}, ε=${failureAnalysis.suggestions.epsilon}`])
     }
   }
 
@@ -283,9 +206,8 @@ export default function MazeSolver() {
       setIsAnimating(false)
       setGoalReached(false)
       setSimulationFailed(false)
+      setFailureReason("")
       setTrainingLogs([])
-      setShowFailureDialog(false)
-      setFailureAnalysis(null)
     } catch (error) {
       console.error("Failed to reset:", error)
     }
@@ -300,6 +222,7 @@ export default function MazeSolver() {
     setAgentPosition(null)
     setGoalReached(false)
     setSimulationFailed(false)
+    setFailureReason("")
     
     // Small delay to ensure state is cleared
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -336,6 +259,7 @@ export default function MazeSolver() {
       if (action === null || action === undefined) {
         console.log("No valid action at position:", row, col)
         setSimulationFailed(true)
+        setFailureReason("Policy has no action for this position. Try increasing episodes to 1000+ or gamma to 0.99 for better coverage.")
         await new Promise(resolve => setTimeout(resolve, 2000))
         setIsAnimating(false)
         return
@@ -355,6 +279,7 @@ export default function MazeSolver() {
       if (newRow < 0 || newRow >= 16 || newCol < 0 || newCol >= 17) {
         console.log("Out of bounds:", newRow, newCol)
         setSimulationFailed(true)
+        setFailureReason("Agent tried to move outside the maze. Policy is broken - try alpha=0.3, gamma=0.99, and 1000+ episodes.")
         setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent tried to move out of bounds`])
         setTrainingLogs(prev => [...prev, `💡 Policy is broken - retrain with better hyperparameters`])
         await new Promise(resolve => setTimeout(resolve, 2000))
@@ -366,6 +291,13 @@ export default function MazeSolver() {
       if (maze[newRow]?.[newCol] === 0) {
         console.log("Hit wall at:", newRow, newCol)
         setSimulationFailed(true)
+        if (gamma < 0.9) {
+          setFailureReason(`Gamma (${gamma}) is too low - agent can't plan ahead. Increase gamma to 0.95-0.99 for better pathfinding.`)
+        } else if (episodes < 500) {
+          setFailureReason(`Only ${episodes} episodes - not enough training. Increase to 1000+ episodes for complete policy learning.`)
+        } else {
+          setFailureReason("Agent hit a wall - policy needs more exploration. Try increasing epsilon to 0.15 or training longer.")
+        }
         setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent hit a wall at (${newRow}, ${newCol})`])
         setTrainingLogs(prev => [...prev, `💡 Policy is incomplete - needs more training`])
         await new Promise(resolve => setTimeout(resolve, 2000))
@@ -377,6 +309,15 @@ export default function MazeSolver() {
       if (path.some(([r, c]) => r === newRow && c === newCol)) {
         console.log("Loop detected at:", newRow, newCol)
         setSimulationFailed(true)
+        if (alpha > 0.7) {
+          setFailureReason(`Alpha (${alpha}) is too high - learning is unstable. Reduce alpha to 0.2-0.3 for stable convergence.`)
+        } else if (gamma < 0.9) {
+          setFailureReason(`Gamma (${gamma}) is too low - agent keeps looping. Increase gamma to 0.99 to value long-term rewards.`)
+        } else if (episodes < 500) {
+          setFailureReason(`Only ${episodes} episodes - agent didn't learn to escape loops. Train for 1000+ episodes.`)
+        } else {
+          setFailureReason("Agent stuck in a loop - policy is suboptimal. Try alpha=0.3, gamma=0.99, epsilon=0.1, episodes=1000.")
+        }
         setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent got stuck in a loop (poor policy)`])
         setTrainingLogs(prev => [...prev, `💡 Try training with more episodes or better hyperparameters`])
         await new Promise(resolve => setTimeout(resolve, 2000))
@@ -397,6 +338,15 @@ export default function MazeSolver() {
     
     console.log("Max steps reached")
     setSimulationFailed(true)
+    if (epsilon > 0.3) {
+      setFailureReason(`Epsilon (${epsilon}) is too high - too much exploration during training. Reduce epsilon to 0.1-0.15 for better exploitation.`)
+    } else if (gamma < 0.9) {
+      setFailureReason(`Gamma (${gamma}) is too low - agent takes inefficient paths. Increase gamma to 0.99 for optimal long-term planning.`)
+    } else if (episodes < 500) {
+      setFailureReason(`Only ${episodes} episodes - path is inefficient. Train for 1000+ episodes for optimal policy.`)
+    } else {
+      setFailureReason("Path is too long - policy is suboptimal. Try alpha=0.3, gamma=0.99, epsilon=0.1, episodes=1000+.")
+    }
     setTrainingLogs(prev => [...prev, `⚠️ Simulation failed: Agent couldn't reach goal in 200 steps`])
     setTrainingLogs(prev => [...prev, `💡 Policy is suboptimal - consider retraining with better hyperparameters`])
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -478,28 +428,33 @@ export default function MazeSolver() {
     return "bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
   }
 
-  const SimpleRewardChart = ({ rewards }: { rewards: number[] }) => {
+  const SimpleRewardChart = ({ rewards, totalEpisodes }: { rewards: number[], totalEpisodes?: number }) => {
     if (!rewards || rewards.length === 0) return null
 
     const maxReward = Math.max(...rewards)
     const minReward = Math.min(...rewards)
     const range = maxReward - minReward || 1
+    const actualTotal = totalEpisodes || rewards.length
+
+    // Calculate start episode (if showing last 200 of more episodes)
+    const startEpisode = actualTotal > rewards.length ? actualTotal - rewards.length + 1 : 1
 
     return (
       <div className="space-y-2">
         <div className="flex justify-between text-xs text-gray-600">
-          <span>Episode 1</span>
-          <span>Episode {rewards.length}</span>
+          <span>Episode {startEpisode}</span>
+          <span>Episode {actualTotal}</span>
         </div>
         <div className="h-32 bg-gray-50 rounded-lg p-2 flex items-end gap-px">
           {rewards.map((reward, index) => {
             const height = ((reward - minReward) / range) * 100
+            const actualEpisode = startEpisode + index
             return (
               <div
                 key={index}
                 className="flex-1 bg-black rounded-t transition-all"
                 style={{ height: `${Math.max(height, 2)}%` }}
-                title={`Episode ${index + 1}: ${reward.toFixed(2)}`}
+                title={`Episode ${actualEpisode}: ${reward.toFixed(2)}`}
               />
             )
           })}
@@ -508,6 +463,11 @@ export default function MazeSolver() {
           <span>Min: {minReward.toFixed(2)}</span>
           <span>Max: {maxReward.toFixed(2)}</span>
         </div>
+        {actualTotal > rewards.length && (
+          <p className="text-xs text-gray-500 italic text-center">
+            Showing last {rewards.length} of {actualTotal} episodes
+          </p>
+        )}
       </div>
     )
   }
@@ -577,23 +537,28 @@ export default function MazeSolver() {
               <div className="space-y-2">
                 <div>
                   <label className="text-xs text-gray-600 mb-1 block">
-                    Episodes <span className="text-gray-400">(50-5000)</span>
+                    Episodes <span className="text-gray-400">(1-10000)</span>
                   </label>
                   <Input
                     type="number"
-                    min="50"
-                    max="5000"
-                    step="50"
                     value={episodes}
                     onChange={(e) => {
-                      const val = Number(e.target.value)
-                      if (val >= 50 && val <= 5000) {
-                        setEpisodes(val)
+                      setEpisodes(Number(e.target.value))
+                      // Clear validation error when user types
+                      if (validationErrors.episodes) {
+                        setValidationErrors(prev => ({ ...prev, episodes: false }))
                       }
                     }}
-                    className="bg-white border-gray-300 h-8 text-sm"
+                    className={`bg-white h-8 text-sm transition-colors ${
+                      validationErrors.episodes 
+                        ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                        : 'border-gray-300'
+                    }`}
                     disabled={trainingStatus.status === "training"}
                   />
+                  {validationErrors.episodes && (
+                    <p className="text-xs text-red-500 mt-1">Must be between 1 and 10000</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <div>
@@ -602,19 +567,24 @@ export default function MazeSolver() {
                     </label>
                     <Input
                       type="number"
-                      min="0.01"
-                      max="1.0"
-                      step="0.05"
+                      step="0.01"
                       value={alpha}
                       onChange={(e) => {
-                        const val = Number(e.target.value)
-                        if (val >= 0.01 && val <= 1.0) {
-                          setAlpha(val)
+                        setAlpha(Number(e.target.value))
+                        if (validationErrors.alpha) {
+                          setValidationErrors(prev => ({ ...prev, alpha: false }))
                         }
                       }}
-                      className="bg-white border-gray-300 h-8 text-sm"
+                      className={`bg-white h-8 text-sm transition-colors ${
+                        validationErrors.alpha 
+                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300'
+                      }`}
                       disabled={trainingStatus.status === "training"}
                     />
+                    {validationErrors.alpha && (
+                      <p className="text-xs text-red-500 mt-1">0.01-1.0</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
@@ -622,19 +592,24 @@ export default function MazeSolver() {
                     </label>
                     <Input
                       type="number"
-                      min="0.5"
-                      max="1.0"
-                      step="0.05"
+                      step="0.01"
                       value={gamma}
                       onChange={(e) => {
-                        const val = Number(e.target.value)
-                        if (val >= 0.5 && val <= 1.0) {
-                          setGamma(val)
+                        setGamma(Number(e.target.value))
+                        if (validationErrors.gamma) {
+                          setValidationErrors(prev => ({ ...prev, gamma: false }))
                         }
                       }}
-                      className="bg-white border-gray-300 h-8 text-sm"
+                      className={`bg-white h-8 text-sm transition-colors ${
+                        validationErrors.gamma 
+                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300'
+                      }`}
                       disabled={trainingStatus.status === "training"}
                     />
+                    {validationErrors.gamma && (
+                      <p className="text-xs text-red-500 mt-1">0.5-1.0</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
@@ -642,19 +617,24 @@ export default function MazeSolver() {
                     </label>
                     <Input
                       type="number"
-                      min="0.0"
-                      max="1.0"
-                      step="0.05"
+                      step="0.01"
                       value={epsilon}
                       onChange={(e) => {
-                        const val = Number(e.target.value)
-                        if (val >= 0.0 && val <= 1.0) {
-                          setEpsilon(val)
+                        setEpsilon(Number(e.target.value))
+                        if (validationErrors.epsilon) {
+                          setValidationErrors(prev => ({ ...prev, epsilon: false }))
                         }
                       }}
-                      className="bg-white border-gray-300 h-8 text-sm"
+                      className={`bg-white h-8 text-sm transition-colors ${
+                        validationErrors.epsilon 
+                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                          : 'border-gray-300'
+                      }`}
                       disabled={trainingStatus.status === "training"}
                     />
+                    {validationErrors.epsilon && (
+                      <p className="text-xs text-red-500 mt-1">0.0-1.0</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -761,7 +741,10 @@ export default function MazeSolver() {
                   <TrendingUp className="h-4 w-4" />
                   Reward Curve
                 </h2>
-                <SimpleRewardChart rewards={trainingStatus.rewards} />
+                <SimpleRewardChart 
+                  rewards={trainingStatus.rewards} 
+                  totalEpisodes={trainingStatus.total_episodes}
+                />
               </Card>
             )}
           </div>
@@ -811,27 +794,32 @@ export default function MazeSolver() {
                   'text-black'
                 }`}>
                   {goalReached ? '🎉 Goal Reached! 🎉' : 
-                   simulationFailed ? '❌ Simulation Failed! ❌' :
+                   simulationFailed ? '❌ Simulation Failed' :
                    'Learned Policy'}
                 </h2>
                 <p className="text-xs text-gray-600">
                   {goalReached
                     ? "Amazing! The agent successfully navigated to the goal!"
                     : simulationFailed
-                    ? "The agent got stuck and couldn't reach the goal. The policy needs improvement!"
+                    ? "The agent got stuck and couldn't reach the goal."
                     : isAnimating 
                     ? "Watch the agent (blue) navigate through the maze, leaving trails behind!"
                     : "Click 'Simulate Policy' to see the agent navigate from start to goal using the learned policy."}
                 </p>
+                {simulationFailed && failureReason && (
+                  <p className="text-xs text-orange-700 mt-2 italic bg-orange-50 p-2 rounded border border-orange-200">
+                    💡 {failureReason}
+                  </p>
+                )}
                 {agentPath.length > 0 && !isAnimating && (
                   <p className={`text-xs mt-1 font-semibold ${
                     goalReached ? 'text-green-600 text-base' : 
-                    simulationFailed ? 'text-red-600 text-base' :
+                    simulationFailed ? 'text-red-600' :
                     'text-green-600'
                   }`}>
                     {goalReached ? '✨ ' : simulationFailed ? '⚠️ ' : ''}
-                    {simulationFailed ? 'Failed after' : 'Path completed in'} {agentPath.length} steps!
-                    {goalReached ? ' ✨' : simulationFailed ? ' ⚠️' : ''}
+                    {simulationFailed ? 'Failed after' : 'Path completed in'} {agentPath.length} steps
+                    {goalReached ? ' ✨' : simulationFailed ? ' - retrain recommended' : ''}
                   </p>
                 )}
               </Card>
@@ -839,116 +827,6 @@ export default function MazeSolver() {
           </div>
         </div>
       </div>
-
-      {/* Failure Analysis Dialog */}
-      {showFailureDialog && failureAnalysis && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <Card className="max-w-2xl w-full bg-white border-red-300 border-2 shadow-2xl">
-            <div className="p-6 space-y-4">
-              {/* Header */}
-              <div className="flex items-center gap-3 border-b pb-3">
-                <XCircle className="h-8 w-8 text-red-500" />
-                <div>
-                  <h2 className="text-xl font-bold text-red-600">Training Failed</h2>
-                  <p className="text-sm text-gray-600">{failureAnalysis.reason}</p>
-                </div>
-              </div>
-
-              {/* Problems Identified */}
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <h3 className="font-semibold text-red-800 mb-2 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4" />
-                  Problems Identified:
-                </h3>
-                <ul className="space-y-1">
-                  {failureAnalysis.problems.map((problem, idx) => (
-                    <li key={idx} className="text-sm text-red-700 flex items-start gap-2">
-                      <span className="text-red-500 font-bold">•</span>
-                      <span>{problem}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Current vs Optimal */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <h4 className="font-semibold text-gray-800 mb-2 text-sm">❌ Your Settings:</h4>
-                  <div className="space-y-1 text-xs font-mono">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Episodes:</span>
-                      <span className="font-bold text-red-600">{episodes}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Alpha (α):</span>
-                      <span className="font-bold text-red-600">{alpha}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Gamma (γ):</span>
-                      <span className="font-bold text-red-600">{gamma}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Epsilon (ε):</span>
-                      <span className="font-bold text-red-600">{epsilon}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <h4 className="font-semibold text-green-800 mb-2 text-sm">✅ Recommended:</h4>
-                  <div className="space-y-1 text-xs font-mono">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Episodes:</span>
-                      <span className="font-bold text-green-600">{failureAnalysis.suggestions.episodes}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Alpha (α):</span>
-                      <span className="font-bold text-green-600">{failureAnalysis.suggestions.alpha}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Gamma (γ):</span>
-                      <span className="font-bold text-green-600">{failureAnalysis.suggestions.gamma}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Epsilon (ε):</span>
-                      <span className="font-bold text-green-600">{failureAnalysis.suggestions.epsilon}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Explanation */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <h4 className="font-semibold text-blue-800 mb-1 text-sm">💡 Why These Values?</h4>
-                <p className="text-xs text-blue-700 leading-relaxed">{failureAnalysis.explanation}</p>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-2">
-                <Button
-                  onClick={applyOptimalSettings}
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                >
-                  <CheckCircle className="mr-2 h-4 w-4" />
-                  Apply Optimal Settings
-                </Button>
-                <Button
-                  onClick={() => setShowFailureDialog(false)}
-                  variant="outline"
-                  className="border-gray-300"
-                >
-                  Keep My Settings
-                </Button>
-              </div>
-
-              {/* Educational Note */}
-              <div className="text-xs text-gray-500 italic text-center pt-2 border-t">
-                💡 Tip: Check HYPERPARAMETERS_GUIDE.md for detailed explanations
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
     </div>
   )
 }

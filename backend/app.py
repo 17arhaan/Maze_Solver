@@ -13,8 +13,8 @@ import logging
 from datetime import datetime
 from envs.maze_env import MazeEnv
 from agents.q_learning import QLearningAgent
+from agents.monte_carlo import MonteCarloAgent
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -23,7 +23,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Also log to console explicitly
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_formatter = logging.Formatter(
@@ -36,7 +35,6 @@ logger.setLevel(logging.INFO)
 
 app = FastAPI()
 
-# Startup logging
 @app.on_event("startup")
 async def startup_event():
     logger.info("="*60)
@@ -44,11 +42,10 @@ async def startup_event():
     logger.info("Server: FastAPI + Uvicorn")
     logger.info("Port: 8000")
     logger.info("CORS Enabled: localhost:3000")
-    logger.info("Endpoints: /train, /status/{job_id}, /policy/{job_id}, /reset")
+    logger.info("Endpoints: /train, /compare, /status/{job_id}, /policy/{job_id}, /reset")
     logger.info("Docs: http://localhost:8000/docs")
     logger.info("="*60)
 
-# Enable CORS for frontend (Next.js default port is 3000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -57,7 +54,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple in-memory job store. For demo purposes only.
 JOBS = {}
 
 class TrainRequest(BaseModel):
@@ -67,7 +63,9 @@ class TrainRequest(BaseModel):
     gamma: float = 0.99
     epsilon: float = 0.15
     max_steps: int = 200
-    # optional maze: flattened list of ints with rows and cols
+    mc_method: str = "first_visit"
+    epsilon_decay: float = 0.995
+    min_epsilon: float = 0.01
     maze: Optional[List[int]] = None
     rows: Optional[int] = None
     cols: Optional[int] = None
@@ -95,6 +93,8 @@ def start_train(req: TrainRequest):
     logger.info(f"Episodes: {req.episodes}")
     logger.info(f"Hyperparameters: α={req.alpha}, γ={req.gamma}, ε={req.epsilon}")
     logger.info(f"Max Steps: {req.max_steps}")
+    if req.algorithm.startswith("monte_carlo"):
+        logger.info(f"MC Method: {req.mc_method}, ε_decay={req.epsilon_decay}, min_ε={req.min_epsilon}")
     
     if req.maze and req.rows and req.cols:
         logger.info(f"Custom Maze: {req.rows}×{req.cols} grid provided")
@@ -118,7 +118,6 @@ def start_train(req: TrainRequest):
         logger.info(f"[{job_id[:8]}] Training thread started")
         JOBS[job_id]['status'] = 'running'
         
-        # build environment
         try:
             if req.maze and req.rows and req.cols:
                 logger.info(f"[{job_id[:8]}] Building custom environment ({req.rows}×{req.cols})")
@@ -134,40 +133,50 @@ def start_train(req: TrainRequest):
             JOBS[job_id]['status'] = 'error'
             return
 
-        agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
-        logger.info(f"[{job_id[:8]}] Q-Learning agent initialized")
-
-        # training loop
+        if req.algorithm == "q_learning":
+            agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
+            logger.info(f"[{job_id[:8]}] Q-Learning agent initialized")
+        elif req.algorithm == "monte_carlo":
+            mc_epsilon = max(req.epsilon, 0.3)
+            agent = MonteCarloAgent(env.n_states, env.n_actions, gamma=req.gamma, epsilon=mc_epsilon, method=req.mc_method, optimistic_init=0.0)
+            logger.info(f"[{job_id[:8]}] Monte Carlo agent initialized (method: {req.mc_method}, initial_ε={mc_epsilon})")
+        elif req.algorithm == "sarsa":
+            logger.warning(f"[{job_id[:8]}] SARSA not implemented yet, using Q-Learning instead")
+            agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
+            logger.info(f"[{job_id[:8]}] Q-Learning agent initialized (placeholder for SARSA)")
+        else:
+            logger.error(f"[{job_id[:8]}] Unknown algorithm: {req.algorithm}")
+            JOBS[job_id]['status'] = 'error'
+            return
         logger.info(f"[{job_id[:8]}] Starting training for {req.episodes} episodes")
         start_time = time.time()
         success_count = 0
         rewards_window = []
         
         for ep in range(req.episodes):
-            total_reward, success = agent.run_episode(env, max_steps=req.max_steps, epsilon=req.epsilon)
+            current_epsilon = req.epsilon
+            if req.algorithm.startswith("monte_carlo"):
+                initial_epsilon = max(req.epsilon, 0.5)
+                decay_factor = (req.min_epsilon / initial_epsilon) ** (1 / req.episodes)
+                current_epsilon = max(req.min_epsilon, initial_epsilon * (decay_factor ** ep))
+                agent.epsilon = current_epsilon
+            
+            total_reward, success = agent.run_episode(env, max_steps=req.max_steps, epsilon=current_epsilon)
             rewards_window.append(total_reward)
             if success:
                 success_count += 1
             
-            # update job status periodically
             if (ep + 1) % max(1, req.episodes // 100) == 0 or ep == req.episodes - 1:
                 JOBS[job_id]['episode'] = ep + 1
                 JOBS[job_id]['progress'] = int(((ep + 1) / req.episodes) * 100)
                 avg_reward = float(sum(rewards_window[-100:]) / min(len(rewards_window), 100))
                 success_rate = float(success_count / (ep + 1))
-                
                 JOBS[job_id]['avg_reward'] = avg_reward
                 JOBS[job_id]['success_rate'] = success_rate
                 JOBS[job_id]['logs'] = rewards_window[-200:]
-                
-                # Log progress
                 logger.info(f"[{job_id[:8]}] Episode {ep + 1}/{req.episodes} ({JOBS[job_id]['progress']}%) | "
                           f"Avg Reward: {avg_reward:.2f} | Success Rate: {success_rate*100:.1f}%")
-            
-            # tiny sleep to allow responsiveness
             time.sleep(0)
-
-        # training finished
         end_time = time.time()
         training_duration = end_time - start_time
         
@@ -209,6 +218,51 @@ def get_policy(job_id: str):
         'policy': job.get('policy'),
         'q_table': job.get('q_table'),
         'status': job.get('status')
+    }
+
+@app.post('/compare')
+def compare_algorithms(req: TrainRequest):
+    """
+    Compare multiple algorithms on the same maze
+    Returns job IDs for each algorithm to track separately
+    """
+    algorithms = ["q_learning", "monte_carlo", "sarsa"]
+    job_ids = {}
+    
+    logger.info("="*60)
+    logger.info(f"🔬 ALGORITHM COMPARISON STARTED")
+    logger.info(f"Algorithms: {', '.join(algorithms)}")
+    logger.info(f"Episodes per algorithm: {req.episodes}")
+    logger.info("="*60)
+    
+    for algorithm in algorithms:
+        # Create a copy of the request with the specific algorithm
+        comparison_req = TrainRequest(
+            algorithm=algorithm,
+            episodes=req.episodes,
+            alpha=req.alpha,
+            gamma=req.gamma,
+            epsilon=req.epsilon,
+            max_steps=req.max_steps,
+            mc_method=req.mc_method,
+            epsilon_decay=req.epsilon_decay,
+            min_epsilon=req.min_epsilon,
+            maze=req.maze,
+            rows=req.rows,
+            cols=req.cols
+        )
+        
+        # Start training for this algorithm
+        result = start_train(comparison_req)
+        job_ids[algorithm] = result["job_id"]
+        
+        logger.info(f"Started {algorithm} training with job ID: {result['job_id'][:8]}")
+    
+    return {
+        "comparison_id": str(uuid.uuid4()),
+        "algorithms": algorithms,
+        "job_ids": job_ids,
+        "status": "comparison_started"
     }
 
 @app.post('/reset')

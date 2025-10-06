@@ -34,9 +34,9 @@ class QLearningAgent:
     def get_policy(self, env):
         policy = []
         for s in range(env.n_states):
-            if env.grid[s] == 0:  # wall (0 = wall in our encoding)
+            if env.grid[s] == 0:
                 policy.append(None)
-            elif env.grid[s] == 3:  # goal
+            elif env.grid[s] == 3:
                 policy.append(None)
             else:
                 policy.append(int(np.argmax(self.Q[s])))

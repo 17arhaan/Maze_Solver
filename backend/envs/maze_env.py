@@ -1,26 +1,37 @@
 import numpy as np
 
 # Simple grid maze environment. Cells encoded as:
-# 0 = empty, 1 = wall, 2 = start, 3 = goal
+# 0 = wall, 1 = empty path, 2 = start, 3 = goal
 class MazeEnv:
-    def __init__(self, grid_flat=None, rows=9, cols=13):
+    def __init__(self, grid_flat=None, rows=16, cols=17):
         self.rows = rows
         self.cols = cols
         if grid_flat is None:
-            # default demo map (same shape as frontend default)
-            self.grid = np.zeros(rows * cols, dtype=int)
-            # border walls
-            for r in range(rows):
-                for c in range(cols):
-                    if r == 0 or r == rows - 1 or c == 0 or c == cols - 1:
-                        self.grid[r * cols + c] = 1
-            walls = [
-                (2, 3), (2, 4), (2, 5), (3, 5), (4, 5), (5, 5), (6, 5), (6, 6), (6, 7), (4, 9), (3, 9), (2, 9), (5, 2)
-            ]
-            for (r, c) in walls:
-                self.grid[r * cols + c] = 1
-            self.grid[1 * cols + 1] = 2
-            self.grid[(rows - 2) * cols + (cols - 2)] = 3
+            # default 16x17 maze matching frontend
+            # Frontend encoding: 0=wall, 1=path
+            # Backend internal: 0=wall, 1=path, 2=start, 3=goal
+            self.grid = np.array([
+                [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0],
+                [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0],
+                [0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 0],
+                [0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0],
+                [0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 0],
+                [0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0],
+                [0, 1, 1, 1, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 0],
+                [0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0],
+                [0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
+                [0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0],
+                [0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
+                [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+            ], dtype=int).flatten()
+            
+            # Set start at (0, 1) and goal at (15, 15)
+            self.grid[0 * cols + 1] = 2  # start
+            self.grid[15 * cols + 15] = 3  # goal
         else:
             assert len(grid_flat) == rows * cols, "grid_flat length mismatch"
             self.grid = np.array(grid_flat, dtype=int)
@@ -55,8 +66,11 @@ class MazeEnv:
         if nr < 0 or nr >= self.rows or nc < 0 or nc >= self.cols:
             return state, -5, False
         next_idx = nr * self.cols + nc
-        if self.grid[next_idx] == 1:
+        # Check if it's a wall (0)
+        if self.grid[next_idx] == 0:
             return state, -5, False
+        # Check if it's the goal (3)
         if self.grid[next_idx] == 3:
             return next_idx, 10, True
+        # Otherwise it's a valid path (1 or 2)
         return next_idx, -1, False

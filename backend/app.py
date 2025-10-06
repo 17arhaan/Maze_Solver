@@ -1,15 +1,27 @@
 ### File: app.py
 from fastapi import FastAPI, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import threading
 import time
 import uuid
 import json
+import os
 from envs.maze_env import MazeEnv
 from agents.q_learning import QLearningAgent
 
 app = FastAPI()
+
+# Enable CORS for frontend (Next.js default port is 3000)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Simple in-memory job store. For demo purposes only.
 JOBS = {}
@@ -25,6 +37,17 @@ class TrainRequest(BaseModel):
     maze: Optional[List[int]] = None
     rows: Optional[int] = None
     cols: Optional[int] = None
+
+@app.get("/", response_class=HTMLResponse)
+def index():
+    return "<h2>Maze Solver Backend</h2><p>Use <a href='/docs'>/docs</a> to access the API.</p>"
+
+@app.get("/favicon.ico")
+def favicon():
+    path = os.path.join(os.path.dirname(__file__), "static", "favicon.ico")
+    if os.path.exists(path):
+        return FileResponse(path)
+    return "", 204
 
 @app.post('/train')
 def start_train(req: TrainRequest):
@@ -97,3 +120,9 @@ def get_policy(job_id: str):
         'q_table': job.get('q_table'),
         'status': job.get('status')
     }
+
+@app.post('/reset')
+def reset_environment():
+    """Reset the training environment and clear all jobs."""
+    JOBS.clear()
+    return {'status': 'reset', 'message': 'All training jobs cleared'}

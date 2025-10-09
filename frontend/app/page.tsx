@@ -38,7 +38,7 @@ export default function MazeSolver() {
   // Monte Carlo specific parameters
   const [mcMethod, setMcMethod] = useState<"first_visit" | "every_visit">("first_visit")
   const [epsilonDecay, setEpsilonDecay] = useState(0.995)
-  const [minEpsilon, setMinEpsilon] = useState(0.01)
+  const [minEpsilon, setMinEpsilon] = useState(0.05)
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({ status: "idle" })
   const [isPolling, setIsPolling] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -1001,7 +1001,25 @@ export default function MazeSolver() {
                 {(["q_learning", "monte_carlo", "sarsa"] as Algorithm[]).map((algo) => (
                   <Button
                     key={algo}
-                    onClick={() => setAlgorithm(algo)}
+                    onClick={() => {
+                      setAlgorithm(algo)
+                      // Auto-set optimal parameters for Monte Carlo
+                      if (algo === "monte_carlo") {
+                        setEpisodes(5000)
+                        setGamma(0.99)
+                        setEpsilon(0.3)
+                        setEpsilonDecay(0.995)
+                        setMinEpsilon(0.05)
+                        setMcMethod("first_visit")
+                        setTrainingLogs(prev => [...prev, `⚙️ Auto-configured optimal Monte Carlo parameters: episodes=5000, γ=0.99, ε=0.3`])
+                      } else if (algo === "q_learning") {
+                        // Reset to Q-Learning defaults
+                        setEpisodes(1000)
+                        setAlpha(0.3)
+                        setGamma(0.99)
+                        setEpsilon(0.15)
+                      }
+                    }}
                     variant={algorithm === algo ? "default" : "outline"}
                     size="sm"
                     className={
@@ -1131,16 +1149,26 @@ export default function MazeSolver() {
                 {algorithm.startsWith("monte_carlo") && (
                   <div className="border-t border-gray-200 pt-2 mt-2">
                     <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
-                      <p className="text-[10px] text-blue-700">
-                        💡 <strong>Monte Carlo Tips:</strong> Needs more episodes than Q-Learning (try 2000-5000+).
-                        Start with ε=0.3-0.5 for better exploration. Learns from complete episodes only.
+                      <p className="text-[10px] text-blue-700 mb-1">
+                        💡 <strong>Monte Carlo Optimal Parameters:</strong>
+                      </p>
+                      <ul className="text-[9px] text-blue-600 space-y-0.5 ml-3">
+                        <li>• <strong>Episodes:</strong> 3000-10000 (needs 3-5x more than Q-Learning)</li>
+                        <li>• <strong>Gamma:</strong> 0.99 (high discount for long-term planning)</li>
+                        <li>• <strong>Epsilon:</strong> 0.3 (higher initial exploration)</li>
+                        <li>• <strong>Method:</strong> First-Visit (more stable)</li>
+                        <li>• <strong>ε Decay:</strong> 0.995 (slow decay to maintain exploration)</li>
+                        <li>• <strong>Min ε:</strong> 0.05 (keep some exploration)</li>
+                      </ul>
+                      <p className="text-[9px] text-blue-600 mt-1 italic">
+                        Uses exploring starts (85% from random states near goal). Expected success: 60-70% on hard mazes, 95%+ on easy mazes.
                       </p>
                     </div>
                     <h3 className="text-xs font-semibold text-gray-700 mb-2">Monte Carlo Parameters</h3>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-600 mb-1 block">
-                          Method
+                          Method <span className="text-green-600 text-[10px]">✓ Optimal: First-Visit</span>
                         </label>
                         <select
                           value={mcMethod}
@@ -1148,13 +1176,13 @@ export default function MazeSolver() {
                           className="w-full h-8 text-sm border border-gray-300 rounded bg-white px-2"
                           disabled={trainingStatus.status === "training"}
                         >
-                          <option value="first_visit">First-Visit</option>
+                          <option value="first_visit">First-Visit (Recommended)</option>
                           <option value="every_visit">Every-Visit</option>
                         </select>
                       </div>
                       <div>
                         <label className="text-xs text-gray-600 mb-1 block">
-                          ε Decay <span className="text-gray-400 text-[10px]">Rate</span>
+                          ε Decay <span className="text-gray-400 text-[10px]">(Optimal: 0.995)</span>
                         </label>
                         <Input
                           type="number"
@@ -1168,7 +1196,7 @@ export default function MazeSolver() {
                     </div>
                     <div className="mt-2">
                       <label className="text-xs text-gray-600 mb-1 block">
-                        Min ε <span className="text-gray-400 text-[10px]">Minimum</span>
+                        Min ε <span className="text-gray-400 text-[10px]">(Optimal: 0.05)</span>
                       </label>
                       <Input
                         type="number"

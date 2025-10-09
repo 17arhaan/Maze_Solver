@@ -119,12 +119,18 @@ def start_train(req: TrainRequest):
         JOBS[job_id]['status'] = 'running'
         
         try:
+            # Use distance-based reward shaping for Monte Carlo to help it learn
+            use_shaping = req.algorithm == "monte_carlo"
+            
             if req.maze and req.rows and req.cols:
                 logger.info(f"[{job_id[:8]}] Building custom environment ({req.rows}×{req.cols})")
-                env = MazeEnv(grid_flat=req.maze, rows=req.rows, cols=req.cols)
+                env = MazeEnv(grid_flat=req.maze, rows=req.rows, cols=req.cols, use_distance_shaping=use_shaping)
             else:
                 logger.info(f"[{job_id[:8]}] Building default environment")
-                env = MazeEnv()  # default demo map
+                env = MazeEnv(use_distance_shaping=use_shaping)  # default demo map
+            
+            if use_shaping:
+                logger.info(f"[{job_id[:8]}] Using distance-based reward shaping for Monte Carlo")
             
             logger.info(f"[{job_id[:8]}] Environment created: {env.n_states} states, {env.n_actions} actions")
             logger.info(f"[{job_id[:8]}] Start: {env.start}, Goal: {env.goal}")
@@ -137,9 +143,12 @@ def start_train(req: TrainRequest):
             agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
             logger.info(f"[{job_id[:8]}] Q-Learning agent initialized")
         elif req.algorithm == "monte_carlo":
-            mc_epsilon = max(req.epsilon, 0.3)
-            agent = MonteCarloAgent(env.n_states, env.n_actions, gamma=req.gamma, epsilon=mc_epsilon, method=req.mc_method, optimistic_init=0.0)
-            logger.info(f"[{job_id[:8]}] Monte Carlo agent initialized (method: {req.mc_method}, initial_ε={mc_epsilon})")
+            # Use higher optimistic initialization and ensure decent exploration
+            optimistic_init = 100.0
+            # Ensure Monte Carlo has reasonable exploration (min 0.2)
+            mc_epsilon = max(req.epsilon, 0.2)
+            agent = MonteCarloAgent(env.n_states, env.n_actions, gamma=req.gamma, epsilon=mc_epsilon, method=req.mc_method, optimistic_init=optimistic_init)
+            logger.info(f"[{job_id[:8]}] Monte Carlo agent initialized (method: {req.mc_method}, initial_ε={mc_epsilon}, optimistic_init={optimistic_init}, exploring_starts=enabled)")
         elif req.algorithm == "sarsa":
             logger.warning(f"[{job_id[:8]}] SARSA not implemented yet, using Q-Learning instead")
             agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
@@ -156,12 +165,17 @@ def start_train(req: TrainRequest):
         for ep in range(req.episodes):
             current_epsilon = req.epsilon
             if req.algorithm.startswith("monte_carlo"):
-                initial_epsilon = max(req.epsilon, 0.5)
-                decay_factor = (req.min_epsilon / initial_epsilon) ** (1 / req.episodes)
-                current_epsilon = max(req.min_epsilon, initial_epsilon * (decay_factor ** ep))
+                # Use exponential decay: epsilon = initial * (decay_rate ^ episode)
+                # Apply the user-specified epsilon_decay parameter
+                mc_initial = max(req.epsilon, 0.2)
+                mc_min = max(req.min_epsilon, 0.05)
+                # Use the passed epsilon_decay parameter for decay
+                current_epsilon = max(mc_min, mc_initial * (req.epsilon_decay ** ep))
                 agent.epsilon = current_epsilon
             
-            total_reward, success = agent.run_episode(env, max_steps=req.max_steps, epsilon=current_epsilon)
+            # Enable exploring starts for Monte Carlo to help it learn long paths
+            exploring_start = req.algorithm == "monte_carlo"
+            total_reward, success = agent.run_episode(env, max_steps=req.max_steps, epsilon=current_epsilon, exploring_start=exploring_start)
             rewards_window.append(total_reward)
             if success:
                 success_count += 1

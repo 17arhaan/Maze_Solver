@@ -16,7 +16,8 @@ class QLearningAgent:
             return np.random.randint(self.n_actions)
         return int(np.argmax(self.Q[state]))
 
-    def run_episode(self, env, max_steps=200, epsilon=None):
+    def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=False):
+        # exploring_start parameter ignored for Q-Learning (only used by Monte Carlo)
         state = env.reset()
         total_reward = 0
         for step in range(max_steps):

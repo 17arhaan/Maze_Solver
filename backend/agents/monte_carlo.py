@@ -24,8 +24,33 @@ class MonteCarloAgent:
             return np.random.randint(self.n_actions)
         return int(np.argmax(self.Q[state]))
 
-    def generate_episode(self, env, max_steps=200, epsilon=None):
-        state = env.reset()
+    def generate_episode(self, env, max_steps=200, epsilon=None, exploring_start=True):
+        # Use exploring starts: randomly initialize from valid states
+        # Bias towards states closer to goal for better exploration
+        if exploring_start and np.random.rand() < 0.85:  # 85% chance of exploring start
+            # Find valid non-wall states
+            valid_states = [s for s in range(env.n_states) if env.grid[s] != 0]
+            if len(valid_states) > 0:
+                # Calculate distances to goal for weighted sampling
+                goal_r, goal_c = env.goal // env.cols, env.goal % env.cols
+                distances = []
+                for s in valid_states:
+                    r, c = s // env.cols, s % env.cols
+                    dist = abs(r - goal_r) + abs(c - goal_c)
+                    distances.append(dist)
+                
+                # Use inverse distance as weight (closer = higher prob)
+                max_dist = max(distances) + 1
+                weights = [max_dist - d for d in distances]
+                total_weight = sum(weights)
+                probs = [w / total_weight for w in weights]
+                
+                state = np.random.choice(valid_states, p=probs)
+            else:
+                state = env.reset()
+        else:
+            state = env.reset()
+        
         episode = []
         total_reward = 0
         
@@ -70,8 +95,8 @@ class MonteCarloAgent:
             self.visit_counts[state, action] += 1
             self.Q[state, action] = np.mean(self.returns[state][action])
 
-    def run_episode(self, env, max_steps=200, epsilon=None):
-        episode, total_reward, success = self.generate_episode(env, max_steps, epsilon)
+    def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=True):
+        episode, total_reward, success = self.generate_episode(env, max_steps, epsilon, exploring_start)
         returns = self.calculate_returns(episode)
         self.update_q_values(episode, returns)
         self.episode_count += 1

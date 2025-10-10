@@ -37,7 +37,7 @@ export default function MazeSolver() {
   const [epsilon, setEpsilon] = useState(0.1)
   // Monte Carlo specific parameters
   const [mcMethod, setMcMethod] = useState<"first_visit" | "every_visit">("first_visit")
-  const [epsilonDecay, setEpsilonDecay] = useState(0.995)
+  const [epsilonDecay, setEpsilonDecay] = useState(0.9996)
   const [minEpsilon, setMinEpsilon] = useState(0.05)
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({ status: "idle" })
   const [isPolling, setIsPolling] = useState(false)
@@ -468,72 +468,6 @@ export default function MazeSolver() {
       setTrainingLogs(prev => [...prev, `🎲 Generated ${actualComplexity.toUpperCase()} maze (path: ${pathLen} steps) • Next: ${nextDifficulty === "easy" ? "EASY" : nextDifficulty === "medium" ? "MEDIUM" : "HARD"}`])
     } else {
       setTrainingLogs(prev => [...prev, `⚠️ Failed to generate ${targetComplexity.toUpperCase()} maze - using fallback`])
-    }
-  }
-
-  const startComparison = async () => {
-    // Validate inputs
-    const errors = {
-      episodes: episodes < 1 || episodes > 10000,
-      alpha: alpha < 0.01 || alpha > 1.0,
-      gamma: gamma < 0.5 || gamma > 1.0,
-      epsilon: epsilon < 0.0 || epsilon > 1.0
-    }
-    
-    setValidationErrors(errors)
-    
-    // If any validation error, don't start comparison
-    if (errors.episodes || errors.alpha || errors.gamma || errors.epsilon) {
-      setTrainingLogs(prev => [...prev, `❌ Invalid hyperparameters - please check highlighted fields`])
-      return
-    }
-    
-    try {
-      setTrainingStatus({ status: "training" })
-      setIsPolling(true)
-      setTrainingLogs([])
-      
-      // Add initial log
-      setTrainingLogs(prev => [...prev, `🔬 Starting algorithm comparison...`])
-      setTrainingLogs(prev => [...prev, `📊 Comparing Q-Learning, Monte Carlo, and SARSA`])
-      setTrainingLogs(prev => [...prev, `📈 Episodes per algorithm: ${episodes}`])
-
-      // Flatten maze for backend (convert 2D to 1D array)
-      const flatMaze = maze.flat()
-      
-      const response = await fetch("http://localhost:8000/compare", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          algorithm: "q_learning", // This will be overridden by the comparison endpoint
-          episodes,
-          alpha,
-          gamma,
-          epsilon,
-          max_steps: 200,
-          mc_method: mcMethod,
-          epsilon_decay: epsilonDecay,
-          min_epsilon: minEpsilon,
-          maze: flatMaze,
-          rows: 16,
-          cols: 17
-        }),
-      })
-
-      if (!response.ok) throw new Error("Comparison failed to start")
-      
-      const data = await response.json()
-      setTrainingLogs(prev => [...prev, `✅ Comparison started with ID: ${data.comparison_id.substring(0, 8)}...`])
-      setTrainingLogs(prev => [...prev, `🚀 All three algorithms are now training in parallel`])
-      
-      // For comparison, we'll track the first job ID (Q-Learning)
-      if (data.job_ids && data.job_ids.q_learning) {
-        setJobId(data.job_ids.q_learning)
-      }
-    } catch (error) {
-      setTrainingStatus({ status: "error", message: "Failed to connect to backend" })
-      setIsPolling(false)
-      setTrainingLogs(prev => [...prev, `❌ Error: Failed to connect to backend`])
     }
   }
 
@@ -1003,21 +937,28 @@ export default function MazeSolver() {
                     key={algo}
                     onClick={() => {
                       setAlgorithm(algo)
-                      // Auto-set optimal parameters for Monte Carlo
+                      // Auto-set optimal parameters for each algorithm
                       if (algo === "monte_carlo") {
                         setEpisodes(5000)
                         setGamma(0.99)
                         setEpsilon(0.3)
-                        setEpsilonDecay(0.995)
+                        setEpsilonDecay(0.9996)
                         setMinEpsilon(0.05)
                         setMcMethod("first_visit")
-                        setTrainingLogs(prev => [...prev, `⚙️ Auto-configured optimal Monte Carlo parameters: episodes=5000, γ=0.99, ε=0.3`])
+                        setTrainingLogs(prev => [...prev, `Optimal Monte Carlo parameters loaded: episodes=5000, γ=0.99, ε=0.3, decay=0.9996`])
                       } else if (algo === "q_learning") {
-                        // Reset to Q-Learning defaults
                         setEpisodes(1000)
                         setAlpha(0.3)
                         setGamma(0.99)
                         setEpsilon(0.15)
+                        setTrainingLogs(prev => [...prev, `Optimal Q-Learning parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
+                      } else if (algo === "sarsa") {
+                        // SARSA optimal parameters (for when it's implemented)
+                        setEpisodes(1000)
+                        setAlpha(0.3)
+                        setGamma(0.99)
+                        setEpsilon(0.15)
+                        setTrainingLogs(prev => [...prev, `Optimal SARSA parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
                       }
                     }}
                     variant={algorithm === algo ? "default" : "outline"}
@@ -1038,13 +979,21 @@ export default function MazeSolver() {
 
             <Card className="p-3 bg-white border-gray-300">
               <h2 className="text-sm font-semibold mb-2 text-black underline">Hyperparameters</h2>
+              
+              {/* SARSA Under Development - Remove this block to enable UI */}
+              {algorithm === "sarsa" ? (
+                <div className="p-6 text-center">
+                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                    <p className="text-2xl mb-2">🚧</p>
+                    <p className="text-sm font-semibold text-yellow-800 mb-1">SARSA Algorithm</p>
+                    <p className="text-xs text-yellow-700">Under Development</p>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-2">
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Episodes <span className="text-gray-400">(1-10000)</span>
-                      {algorithm.startsWith("monte_carlo") && (
-                        <span className="text-orange-600 text-[10px] ml-1">⚠️ MC needs 3-5x more episodes</span>
-                      )}
+                      Episodes
                     </label>
                   <Input
                     type="number"
@@ -1070,7 +1019,7 @@ export default function MazeSolver() {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Alpha (α) <span className="text-gray-400 text-[10px]">Learning Rate</span>
+                      Alpha (α)
                     </label>
                     <Input
                       type="number"
@@ -1095,7 +1044,7 @@ export default function MazeSolver() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Gamma (γ) <span className="text-gray-400 text-[10px]">Discount</span>
+                      Gamma (γ)
                     </label>
                     <Input
                       type="number"
@@ -1120,7 +1069,7 @@ export default function MazeSolver() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Epsilon (ε) <span className="text-gray-400 text-[10px]">Greedy Value</span>
+                      Epsilon (ε)
                     </label>
                     <Input
                       type="number"
@@ -1148,27 +1097,11 @@ export default function MazeSolver() {
                 {/* Monte Carlo specific parameters */}
                 {algorithm.startsWith("monte_carlo") && (
                   <div className="border-t border-gray-200 pt-2 mt-2">
-                    <div className="bg-blue-50 border border-blue-200 rounded p-2 mb-2">
-                      <p className="text-[10px] text-blue-700 mb-1">
-                        💡 <strong>Monte Carlo Optimal Parameters:</strong>
-                      </p>
-                      <ul className="text-[9px] text-blue-600 space-y-0.5 ml-3">
-                        <li>• <strong>Episodes:</strong> 3000-10000 (needs 3-5x more than Q-Learning)</li>
-                        <li>• <strong>Gamma:</strong> 0.99 (high discount for long-term planning)</li>
-                        <li>• <strong>Epsilon:</strong> 0.3 (higher initial exploration)</li>
-                        <li>• <strong>Method:</strong> First-Visit (more stable)</li>
-                        <li>• <strong>ε Decay:</strong> 0.995 (slow decay to maintain exploration)</li>
-                        <li>• <strong>Min ε:</strong> 0.05 (keep some exploration)</li>
-                      </ul>
-                      <p className="text-[9px] text-blue-600 mt-1 italic">
-                        Uses exploring starts (85% from random states near goal). Expected success: 60-70% on hard mazes, 95%+ on easy mazes.
-                      </p>
-                    </div>
                     <h3 className="text-xs font-semibold text-gray-700 mb-2">Monte Carlo Parameters</h3>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-600 mb-1 block">
-                          Method <span className="text-green-600 text-[10px]">✓ Optimal: First-Visit</span>
+                          Method
                         </label>
                         <select
                           value={mcMethod}
@@ -1176,17 +1109,17 @@ export default function MazeSolver() {
                           className="w-full h-8 text-sm border border-gray-300 rounded bg-white px-2"
                           disabled={trainingStatus.status === "training"}
                         >
-                          <option value="first_visit">First-Visit (Recommended)</option>
+                          <option value="first_visit">First-Visit</option>
                           <option value="every_visit">Every-Visit</option>
                         </select>
                       </div>
                       <div>
                         <label className="text-xs text-gray-600 mb-1 block">
-                          ε Decay <span className="text-gray-400 text-[10px]">(Optimal: 0.995)</span>
+                          ε Decay
                         </label>
                         <Input
                           type="number"
-                          step="0.001"
+                          step="0.0001"
                           value={epsilonDecay}
                           onChange={(e) => setEpsilonDecay(Number(e.target.value))}
                           className="bg-white h-8 text-sm border-gray-300"
@@ -1196,7 +1129,7 @@ export default function MazeSolver() {
                     </div>
                     <div className="mt-2">
                       <label className="text-xs text-gray-600 mb-1 block">
-                        Min ε <span className="text-gray-400 text-[10px]">(Optimal: 0.05)</span>
+                        Min ε
                       </label>
                       <Input
                         type="number"
@@ -1210,98 +1143,120 @@ export default function MazeSolver() {
                   </div>
                 )}
               </div>
+              )}
+              {/* End SARSA block */}
             </Card>
 
-            <Card className="p-3 bg-white border-gray-300">
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <Button
-                    onClick={startTraining}
-                    disabled={trainingStatus.status === "training"}
-                    size="sm"
-                    className="flex-1 bg-black text-white hover:bg-gray-800 text-xs"
-                  >
-                    {trainingStatus.status === "training" ? (
-                      <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Training...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-3 w-3" />
-                        Start Training
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={resetEnvironment}
-                    variant="outline"
-                    size="sm"
-                    className="border-gray-300 hover:bg-gray-100 bg-white text-black"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                  </Button>
-                </div>
-                
+            <Card className="p-4 bg-white border-gray-300">
+              <div className="space-y-3">
                 <Button
-                  onClick={startComparison}
-                  disabled={trainingStatus.status === "training"}
-                  size="sm"
-                  className="w-full bg-purple-600 text-white hover:bg-purple-700 text-xs"
+                  onClick={startTraining}
+                  disabled={trainingStatus.status === "training" || algorithm === "sarsa"}
+                  className="w-full h-12 bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
                 >
-                  <TrendingUp className="mr-2 h-3 w-3" />
-                  Compare All Algorithms
+                  {trainingStatus.status === "training" ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Training in Progress...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4 fill-white" />
+                      Start Training
+                    </>
+                  )}
                 </Button>
-              </div>
               
-              {trainingStatus.policy && (
-                <div className="mt-2">
+                {trainingStatus.policy && (
                   <Button
                     onClick={simulatePolicy}
                     disabled={isAnimating}
-                    size="sm"
-                    className="w-full bg-green-600 text-white hover:bg-green-700 text-xs"
+                    className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-500 hover:to-green-600 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
                   >
                     {isAnimating ? (
                       <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Simulating...
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Simulating Path...
                       </>
                     ) : (
                       <>
-                        <Play className="mr-2 h-3 w-3" />
-                        Simulate Policy
+                        <Play className="mr-2 h-4 w-4 fill-white" />
+                        Simulate Learned Policy
                       </>
                     )}
                   </Button>
-                </div>
-              )}
+                )}
+                
+                <Button
+                  onClick={resetEnvironment}
+                  variant="outline"
+                  className="w-full h-10 border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-medium text-sm transition-all duration-200"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset Environment
+                </Button>
+              </div>
 
               {trainingStatus.status !== "idle" && (
-                <div className="mt-2 p-2 bg-gray-100 rounded-lg">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Status:</span>
+                <div className="mt-3 p-4 bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-bold text-gray-800">Training Status</span>
                     <span
-                      className={
+                      className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-sm ${
                         trainingStatus.status === "completed"
-                          ? "text-green-600"
+                          ? "bg-green-500 text-white"
                           : trainingStatus.status === "error"
-                            ? "text-red-600"
-                            : "text-blue-600"
-                      }
+                            ? "bg-red-500 text-white"
+                            : "bg-blue-500 text-white animate-pulse"
+                      }`}
                     >
-                      {trainingStatus.status}
+                      {trainingStatus.status.toUpperCase()}
                     </span>
                   </div>
-                  {trainingStatus.episode && (
-                    <div className="flex items-center justify-between text-xs mt-1">
-                      <span className="text-gray-600">Progress:</span>
-                      <span className="text-black">
-                        {trainingStatus.episode} / {trainingStatus.total_episodes}
-                      </span>
+                  {trainingStatus.episode && trainingStatus.total_episodes && (
+                    <div>
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-gray-700 font-semibold">Progress</span>
+                        <span className="text-gray-900 font-bold">
+                          {trainingStatus.episode} / {trainingStatus.total_episodes}
+                        </span>
+                      </div>
+                      <div className="relative w-full bg-gray-300 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div
+                          className={`h-3 rounded-full transition-all duration-500 ease-out ${
+                            trainingStatus.status === "completed"
+                              ? "bg-gradient-to-r from-green-400 to-green-600"
+                              : trainingStatus.status === "error"
+                              ? "bg-gradient-to-r from-red-400 to-red-600"
+                              : "bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600"
+                          }`}
+                          style={{
+                            width: `${(trainingStatus.episode / trainingStatus.total_episodes) * 100}%`,
+                          }}
+                        >
+                          {trainingStatus.status === "training" && (
+                            <div 
+                              className="absolute inset-0 opacity-30 animate-shimmer"
+                              style={{
+                                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
+                                backgroundSize: '200% 100%'
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center mt-2">
+                        <span className="text-xs font-semibold text-gray-600">
+                          {Math.round((trainingStatus.episode / trainingStatus.total_episodes) * 100)}% Complete
+                        </span>
+                      </div>
                     </div>
                   )}
-                  {trainingStatus.message && <p className="text-xs text-gray-600 mt-1">{trainingStatus.message}</p>}
+                  {trainingStatus.message && (
+                    <p className="text-xs text-gray-600 mt-3 italic bg-gray-50 p-2 rounded border border-gray-200">
+                      {trainingStatus.message}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>

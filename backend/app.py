@@ -64,7 +64,7 @@ class TrainRequest(BaseModel):
     epsilon: float = 0.15
     max_steps: int = 200
     mc_method: str = "first_visit"
-    epsilon_decay: float = 0.995
+    epsilon_decay: float = 0.9996
     min_epsilon: float = 0.01
     maze: Optional[List[int]] = None
     rows: Optional[int] = None

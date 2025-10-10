@@ -16,7 +16,8 @@ class QLearningAgent:
             return np.random.randint(self.n_actions)
         return int(np.argmax(self.Q[state]))
 
-    def run_episode(self, env, max_steps=200, epsilon=None):
+    def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=False):
+        # exploring_start parameter ignored for Q-Learning (only used by Monte Carlo)
         state = env.reset()
         total_reward = 0
         for step in range(max_steps):
@@ -34,9 +35,9 @@ class QLearningAgent:
     def get_policy(self, env):
         policy = []
         for s in range(env.n_states):
-            if env.grid[s] == 0:  # wall (0 = wall in our encoding)
+            if env.grid[s] == 0:
                 policy.append(None)
-            elif env.grid[s] == 3:  # goal
+            elif env.grid[s] == 3:
                 policy.append(None)
             else:
                 policy.append(int(np.argmax(self.Q[s])))

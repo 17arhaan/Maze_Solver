@@ -3,9 +3,10 @@ import numpy as np
 # Simple grid maze environment. Cells encoded as:
 # 0 = wall, 1 = empty path, 2 = start, 3 = goal
 class MazeEnv:
-    def __init__(self, grid_flat=None, rows=16, cols=17):
+    def __init__(self, grid_flat=None, rows=16, cols=17, use_distance_shaping=False):
         self.rows = rows
         self.cols = cols
+        self.use_distance_shaping = use_distance_shaping
         if grid_flat is None:
             # default 16x17 maze matching frontend
             # Frontend encoding: 0=wall, 1=path
@@ -35,9 +36,12 @@ class MazeEnv:
         else:
             assert len(grid_flat) == rows * cols, "grid_flat length mismatch"
             self.grid = np.array(grid_flat, dtype=int)
-            # Set start and goal for custom maze
-            self.grid[0 * cols + 1] = 2  # start at (0, 1)
-            self.grid[15 * cols + 15] = 3  # goal at (15, 15)
+            # Only set start/goal if not already present in custom maze
+            if 2 not in self.grid:
+                self.grid[0 * cols + 1] = 2  # default start at (0, 1)
+            if 3 not in self.grid:
+                # Set goal at last valid cell
+                self.grid[(rows - 1) * cols + (cols - 2)] = 3  # default goal at bottom-right area
         
         # find start and goal
         starts = np.where(self.grid == 2)[0]
@@ -75,6 +79,18 @@ class MazeEnv:
             return state, -5, False
         # Check if it's the goal (3)
         if self.grid[next_idx] == 3:
-            return next_idx, 10, True
+            return next_idx, 100, True  # Increased goal reward to 100 for better learning
+        
+        # Optional: Add distance-based reward shaping for Monte Carlo
+        base_reward = -1
+        if self.use_distance_shaping:
+            # Calculate Manhattan distance to goal
+            goal_r, goal_c = self.goal // self.cols, self.goal % self.cols
+            old_dist = abs(r - goal_r) + abs(c - goal_c)
+            new_dist = abs(nr - goal_r) + abs(nc - goal_c)
+            # Small bonus for getting closer, small penalty for moving away
+            distance_reward = 0.1 * (old_dist - new_dist)
+            base_reward += distance_reward
+        
         # Otherwise it's a valid path (1 or 2)
-        return next_idx, -1, False
+        return next_idx, base_reward, False

@@ -95,3 +95,17 @@
     grid-template-columns: repeat(17, minmax(0, 1fr));
   }
 }
+
+/* Shimmer animation for progress bar */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite linear;
+}

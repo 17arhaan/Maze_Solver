@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Loader2, Play, RotateCcw, TrendingUp, Shuffle } from "lucide-react"
 
-type Algorithm = "monte_carlo" | "sarsa" | "q_learning"
+type Algorithm = "q_learning" | "monte_carlo" | "sarsa"
 
 interface BackendStatus {
   status: "queued" | "running" | "finished" | "error"
@@ -35,6 +35,10 @@ export default function MazeSolver() {
   const [alpha, setAlpha] = useState(0.1)
   const [gamma, setGamma] = useState(0.9)
   const [epsilon, setEpsilon] = useState(0.1)
+  // Monte Carlo specific parameters
+  const [mcMethod, setMcMethod] = useState<"first_visit" | "every_visit">("first_visit")
+  const [epsilonDecay, setEpsilonDecay] = useState(0.9996)
+  const [minEpsilon, setMinEpsilon] = useState(0.05)
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>({ status: "idle" })
   const [isPolling, setIsPolling] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
@@ -117,7 +121,7 @@ export default function MazeSolver() {
     const targetComplexity = nextDifficulty
     
     let attempts = 0
-    let maxAttempts = 50
+    let maxAttempts = 100  // Increased attempts
     let generatedMaze: number[][] = []
     let pathLen = 0
     
@@ -134,76 +138,160 @@ export default function MazeSolver() {
         }
       }
       
-      // Carve paths using recursive backtracking DFS
-      const visited = new Set<string>()
+      // Use DIFFERENT generation strategy based on attempt number for MORE variety
+      const strategy = attempts % 3
       
-      const carve = (row: number, col: number) => {
-        const key = `${row},${col}`
-        visited.add(key)
-        newMaze[row][col] = 1
+      if (strategy === 0) {
+        // Strategy 1: Classic recursive backtracking DFS
+        const visited = new Set<string>()
         
-        // Get random direction order
-        const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]]
-        for (let i = directions.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[directions[i], directions[j]] = [directions[j], directions[i]]
+        const carve = (row: number, col: number) => {
+          const key = `${row},${col}`
+          visited.add(key)
+          newMaze[row][col] = 1
+          
+          // Get random direction order
+          const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]]
+          for (let i = directions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1))
+            ;[directions[i], directions[j]] = [directions[j], directions[i]]
+          }
+          
+          for (const [dr, dc] of directions) {
+            const newRow = row + dr
+            const newCol = col + dc
+            const newKey = `${newRow},${newCol}`
+            
+            if (newRow > 0 && newRow < rows - 1 && newCol > 0 && newCol < cols - 1 && !visited.has(newKey)) {
+              // Carve through the wall between
+              newMaze[row + dr / 2][col + dc / 2] = 1
+              carve(newRow, newCol)
+            }
+          }
         }
         
-        for (const [dr, dc] of directions) {
-          const newRow = row + dr
-          const newCol = col + dc
-          const newKey = `${newRow},${newCol}`
+        // Start carving from RANDOM position
+        const startRow = Math.floor(Math.random() * 6) * 2 + 1
+        const startCol = Math.floor(Math.random() * 6) * 2 + 1
+        carve(startRow, startCol)
+        
+      } else if (strategy === 1) {
+        // Strategy 2: Random walk from multiple starting points
+        const numStarts = Math.floor(Math.random() * 3) + 2  // 2-4 starting points
+        for (let s = 0; s < numStarts; s++) {
+          let r = Math.floor(Math.random() * (rows - 2)) + 1
+          let c = Math.floor(Math.random() * (cols - 2)) + 1
           
-          if (newRow > 0 && newRow < rows - 1 && newCol > 0 && newCol < cols - 1 && !visited.has(newKey)) {
-            // Carve through the wall between
-            newMaze[row + dr / 2][col + dc / 2] = 1
-            carve(newRow, newCol)
+          // Random walk from each starting point
+          const walkLength = Math.floor(Math.random() * 40) + 20
+          for (let step = 0; step < walkLength; step++) {
+            newMaze[r][c] = 1
+            
+            // Move in random direction
+            const direction = Math.floor(Math.random() * 4)
+            if (direction === 0 && r > 1) r--
+            else if (direction === 1 && r < rows - 2) r++
+            else if (direction === 2 && c > 1) c--
+            else if (direction === 3 && c < cols - 2) c++
+          }
+        }
+        
+      } else {
+        // Strategy 3: Grid-based with random walls removed
+        // Create a grid pattern
+        for (let r = 1; r < rows - 1; r += 2) {
+          for (let c = 1; c < cols - 1; c += 2) {
+            newMaze[r][c] = 1
+            // Randomly connect to neighbors
+            if (c < cols - 2 && Math.random() < 0.5) {
+              newMaze[r][c + 1] = 1
+            }
+            if (r < rows - 2 && Math.random() < 0.5) {
+              newMaze[r + 1][c] = 1
+            }
           }
         }
       }
-      
-      // Start carving from (1, 1)
-      carve(1, 1)
       
       // Ensure start and goal are accessible
       newMaze[0][1] = 1
       newMaze[15][15] = 1
       
-      // Add additional paths based on target difficulty
-      let additionalPathsCount = 0
-      if (targetComplexity === "easy") {
-        additionalPathsCount = Math.floor(Math.random() * 12) + 18 // 18-30 extra paths (more open)
-      } else if (targetComplexity === "medium") {
-        additionalPathsCount = Math.floor(Math.random() * 10) + 10 // 10-20 extra paths
-      } else {
-        additionalPathsCount = Math.floor(Math.random() * 8) + 3  // 3-10 extra paths (more walls)
+      // Connect start and goal to the main maze first
+      // Connect start (0,1) downward
+      if (newMaze[1][1] === 0 && newMaze[2][1] === 1) {
+        newMaze[1][1] = 1
+      }
+      // Connect goal (15,15) - try multiple directions
+      const goalConnections = [
+        [14, 15], [15, 14], [14, 14]
+      ]
+      for (const [r, c] of goalConnections) {
+        if (newMaze[r][c] === 1) {
+          // Already connected
+          break
+        }
+      }
+      // Force connection if needed
+      if (newMaze[14][15] === 0 && newMaze[15][14] === 0) {
+        newMaze[14][15] = 1
       }
       
-      for (let i = 0; i < additionalPathsCount; i++) {
-        const r = Math.floor(Math.random() * (rows - 2)) + 1
-        const c = Math.floor(Math.random() * (cols - 2)) + 1
-        if (newMaze[r][c] === 0) {
-          const neighbors = [
-            newMaze[r-1]?.[c],
-            newMaze[r+1]?.[c],
-            newMaze[r]?.[c-1],
-            newMaze[r]?.[c+1]
-          ].filter(n => n === 1).length
-          
-          if (neighbors >= 1 && neighbors <= 2) {
-            newMaze[r][c] = 1
+      // Add additional paths based on target difficulty - EXTREME differences
+      if (targetComplexity === "easy") {
+        // Easy: CREATE DIRECT PATHS - literally fill most of the maze
+        // Add horizontal corridors
+        for (let r = 1; r < rows - 1; r++) {
+          for (let c = 1; c < cols - 1; c++) {
+            // Fill about 70% of the maze with paths
+            if (Math.random() < 0.7) {
+              newMaze[r][c] = 1
+            }
+          }
+        }
+        
+        // Ensure diagonal shortcuts exist
+        for (let i = 0; i < Math.min(rows, cols); i++) {
+          if (i < rows - 1 && i < cols - 1) {
+            newMaze[i][i] = 1
+            if (i + 1 < rows && i + 1 < cols) {
+              newMaze[i + 1][i] = 1
+              newMaze[i][i + 1] = 1
+            }
+          }
+        }
+      } else if (targetComplexity === "medium") {
+        // Medium: moderate paths
+        const additionalPathsCount = Math.floor(Math.random() * 20) + 15
+        for (let pass = 0; pass < 4; pass++) {
+          for (let i = 0; i < additionalPathsCount / 4; i++) {
+            const r = Math.floor(Math.random() * (rows - 2)) + 1
+            const c = Math.floor(Math.random() * (cols - 2)) + 1
+            if (newMaze[r][c] === 0) {
+              const neighbors = [
+                newMaze[r-1]?.[c],
+                newMaze[r+1]?.[c],
+                newMaze[r]?.[c-1],
+                newMaze[r]?.[c+1]
+              ].filter(n => n === 1).length
+              
+              if (neighbors >= 1 && neighbors <= 2 && Math.random() < 0.7) {
+                newMaze[r][c] = 1
+              }
+            }
           }
         }
       }
+      // Hard: NO additional paths at all - use only base generation
       
       // Calculate path length
       pathLen = estimatePathLength(newMaze)
       
       // Check if this maze matches our target complexity
       let achievedComplexity: "easy" | "medium" | "hard"
-      if (pathLen < 30) achievedComplexity = "easy"
-      else if (pathLen > 50) achievedComplexity = "hard"
-      else achievedComplexity = "medium"
+      if (pathLen < 30) achievedComplexity = "easy"      // Easy: short paths (increased threshold)
+      else if (pathLen > 55) achievedComplexity = "hard" // Hard: long paths
+      else achievedComplexity = "medium"                  // Medium: everything else
       
       // Make sure path exists (pathLen > 0)
       if (pathLen === 0) {
@@ -211,8 +299,19 @@ export default function MazeSolver() {
         continue
       }
       
-      // If we hit the target complexity (or close enough), use this maze
-      if (achievedComplexity === targetComplexity || attempts > 30) {
+      // Strict matching - we want the TARGET difficulty
+      const isMatch = achievedComplexity === targetComplexity
+      
+      // Also accept close matches for specific cases
+      const isCloseMatch = (
+        (targetComplexity === "easy" && pathLen < 35) ||  // Very lenient for easy
+        (targetComplexity === "medium" && pathLen >= 30 && pathLen <= 55) ||
+        (targetComplexity === "hard" && pathLen > 50)
+      )
+      
+      // If we hit the target or close match, use this maze
+      // Give up after 50 attempts
+      if (isMatch || (isCloseMatch && attempts > 20) || attempts > 50) {
         generatedMaze = newMaze
         break
       }
@@ -226,41 +325,111 @@ export default function MazeSolver() {
       const cols = 17
       generatedMaze = Array(rows).fill(0).map(() => Array(cols).fill(0))
       
-      // Always create a guaranteed L-shaped path from start to goal
-      // Vertical corridor on column 1
-      for (let r = 0; r < rows; r++) {
-        generatedMaze[r][1] = 1
-      }
-      // Horizontal corridor on row 15
-      for (let c = 1; c <= 15; c++) {
-        generatedMaze[15][c] = 1
-      }
+      // Create random path pattern (not always L-shaped)
+      const pathType = Math.floor(Math.random() * 3)
       
-      // Add complexity based on target
-      if (targetComplexity === "easy") {
-        // Add many horizontal and vertical corridors
-        for (let r = 2; r < rows - 1; r += 3) {
-          for (let c = 3; c < cols - 2; c++) {
-            if (Math.random() < 0.6) generatedMaze[r][c] = 1
+      if (pathType === 0) {
+        // L-shaped: Vertical then horizontal
+        for (let r = 0; r < rows; r++) {
+          generatedMaze[r][1] = 1
+        }
+        for (let c = 1; c <= 15; c++) {
+          generatedMaze[15][c] = 1
+        }
+      } else if (pathType === 1) {
+        // Snake pattern: zigzag from top to bottom
+        let currentCol = 1
+        for (let r = 0; r < rows; r++) {
+          generatedMaze[r][currentCol] = 1
+          if (r < rows - 1 && r % 3 === 2) {
+            // Move horizontally
+            const direction = currentCol < 8 ? 1 : -1
+            for (let c = currentCol; c >= 1 && c <= 15; c += direction) {
+              generatedMaze[r][c] = 1
+              if (Math.random() < 0.3) break
+            }
+            currentCol = Math.min(15, Math.max(1, currentCol + direction * (Math.floor(Math.random() * 6) + 3)))
           }
         }
-        for (let c = 3; c < cols - 1; c += 3) {
-          for (let r = 2; r < rows - 2; r++) {
-            if (Math.random() < 0.6) generatedMaze[r][c] = 1
+        // Ensure path to goal
+        for (let c = Math.min(currentCol, 15); c <= 15; c++) {
+          generatedMaze[15][c] = 1
+        }
+      } else {
+        // Diagonal-ish pattern
+        for (let step = 0; step <= 15; step++) {
+          const r = Math.min(15, Math.floor(step * 15 / 15))
+          const c = Math.min(15, Math.max(1, step))
+          generatedMaze[r][c] = 1
+          if (r > 0) generatedMaze[r-1][c] = 1
+          if (c > 1) generatedMaze[r][c-1] = 1
+        }
+      }
+      
+      // Add complexity based on target with MORE randomization
+      const densityMultiplier = Math.random() * 0.3 + 0.85  // 0.85-1.15 random variation
+      
+      if (targetComplexity === "easy") {
+        // Add many random corridors
+        const corridorCount = Math.floor((Math.random() * 4) + 6)  // 6-10 corridors
+        for (let i = 0; i < corridorCount; i++) {
+          const isHorizontal = Math.random() < 0.5
+          const startPos = Math.floor(Math.random() * (rows - 2)) + 1
+          const length = Math.floor(Math.random() * 8) + 5
+          
+          if (isHorizontal) {
+            const row = startPos
+            const startCol = Math.floor(Math.random() * (cols - length - 2)) + 1
+            for (let c = startCol; c < Math.min(cols - 1, startCol + length); c++) {
+              if (Math.random() < 0.7 * densityMultiplier) generatedMaze[row][c] = 1
+            }
+          } else {
+            const col = startPos
+            const startRow = Math.floor(Math.random() * (rows - length - 2)) + 1
+            for (let r = startRow; r < Math.min(rows - 1, startRow + length); r++) {
+              if (Math.random() < 0.7 * densityMultiplier) generatedMaze[r][col] = 1
+            }
           }
         }
       } else if (targetComplexity === "medium") {
-        // Add some corridors
-        for (let r = 3; r < rows - 1; r += 4) {
-          for (let c = 3; c < cols - 2; c += 2) {
-            if (Math.random() < 0.5) generatedMaze[r][c] = 1
+        // Add some corridors with medium density
+        const corridorCount = Math.floor((Math.random() * 3) + 3)  // 3-6 corridors
+        for (let i = 0; i < corridorCount; i++) {
+          const isHorizontal = Math.random() < 0.5
+          const startPos = Math.floor(Math.random() * (rows - 2)) + 1
+          const length = Math.floor(Math.random() * 6) + 3
+          
+          if (isHorizontal) {
+            const row = startPos
+            const startCol = Math.floor(Math.random() * (cols - length - 2)) + 1
+            for (let c = startCol; c < Math.min(cols - 1, startCol + length); c++) {
+              if (Math.random() < 0.5 * densityMultiplier) generatedMaze[row][c] = 1
+            }
+          } else {
+            const col = startPos
+            const startRow = Math.floor(Math.random() * (rows - length - 2)) + 1
+            for (let r = startRow; r < Math.min(rows - 1, startRow + length); r++) {
+              if (Math.random() < 0.5 * densityMultiplier) generatedMaze[r][col] = 1
+            }
           }
         }
       } else {
-        // Hard: minimal extra paths
-        for (let r = 4; r < rows - 1; r += 5) {
-          for (let c = 4; c < cols - 2; c += 3) {
-            if (Math.random() < 0.3) generatedMaze[r][c] = 1
+        // Hard: VERY minimal extra paths - create a narrow, winding path
+        // Only add a few strategic connections, not random corridors
+        const strategicSpots = Math.floor(Math.random() * 3) + 2  // 2-5 spots only
+        for (let i = 0; i < strategicSpots; i++) {
+          const r = Math.floor(Math.random() * (rows - 2)) + 1
+          const c = Math.floor(Math.random() * (cols - 2)) + 1
+          // Only add if exactly 1 neighbor (creates narrow passages)
+          const neighbors = [
+            generatedMaze[r-1]?.[c],
+            generatedMaze[r+1]?.[c],
+            generatedMaze[r]?.[c-1],
+            generatedMaze[r]?.[c+1]
+          ].filter(n => n === 1).length
+          
+          if (neighbors === 1 && Math.random() < 0.25 * densityMultiplier) {
+            generatedMaze[r][c] = 1
           }
         }
       }
@@ -272,19 +441,19 @@ export default function MazeSolver() {
       pathLen = estimatePathLength(generatedMaze)
     }
     
-    // Determine actual complexity
+    // Determine actual complexity (match the generation thresholds)
     let actualComplexity: "easy" | "medium" | "hard"
     if (pathLen < 30) actualComplexity = "easy"
-    else if (pathLen > 50) actualComplexity = "hard"
+    else if (pathLen > 55) actualComplexity = "hard"
     else actualComplexity = "medium"
     
     setMaze(generatedMaze)
     setMazeComplexity(actualComplexity)
     setPathLength(pathLen)
     
-    // Cycle to next difficulty
-    if (targetComplexity === "easy") setNextDifficulty("medium")
-    else if (targetComplexity === "medium") setNextDifficulty("hard")
+    // Cycle to next difficulty based on what was ACTUALLY generated (not target)
+    if (actualComplexity === "easy") setNextDifficulty("medium")
+    else if (actualComplexity === "medium") setNextDifficulty("hard")
     else setNextDifficulty("easy")
     
     // Reset simulation state
@@ -341,6 +510,9 @@ export default function MazeSolver() {
           gamma,
           epsilon,
           max_steps: 200,
+          mc_method: mcMethod,
+          epsilon_decay: epsilonDecay,
+          min_epsilon: minEpsilon,
           maze: flatMaze,
           rows: 16,
           cols: 17
@@ -733,7 +905,7 @@ export default function MazeSolver() {
             <Card className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300 shadow-md">
               <h2 className="text-sm font-semibold mb-2 text-black underline">Readme</h2>
               <p className="text-xs text-gray-700 leading-relaxed mb-[-2px] mt-[-15px] italic">
-                This project demonstrates Reinforcement Learning algorithms (Monte Carlo, SARSA, Q-Learning) solving a
+                This project demonstrates Reinforcement Learning algorithms (Q-Learning, Monte Carlo, SARSA) solving a
                 16×17 maze. The agent learns to navigate from the start (blue) to the goal (red) by exploring the
                 environment and optimizing its policy through trial and error.
               </p>
@@ -760,10 +932,35 @@ export default function MazeSolver() {
             <Card className="p-3 bg-white border-gray-300">
               <h2 className="text-sm font-semibold mb-2 text-black underline">Algorithm Selection</h2>
               <div className="grid grid-cols-3 gap-2">
-                {(["monte_carlo", "sarsa", "q_learning"] as Algorithm[]).map((algo) => (
+                {(["q_learning", "monte_carlo", "sarsa"] as Algorithm[]).map((algo) => (
                   <Button
                     key={algo}
-                    onClick={() => setAlgorithm(algo)}
+                    onClick={() => {
+                      setAlgorithm(algo)
+                      // Auto-set optimal parameters for each algorithm
+                      if (algo === "monte_carlo") {
+                        setEpisodes(5000)
+                        setGamma(0.99)
+                        setEpsilon(0.3)
+                        setEpsilonDecay(0.9996)
+                        setMinEpsilon(0.05)
+                        setMcMethod("first_visit")
+                        setTrainingLogs(prev => [...prev, `Optimal Monte Carlo parameters loaded: episodes=5000, γ=0.99, ε=0.3, decay=0.9996`])
+                      } else if (algo === "q_learning") {
+                        setEpisodes(1000)
+                        setAlpha(0.3)
+                        setGamma(0.99)
+                        setEpsilon(0.15)
+                        setTrainingLogs(prev => [...prev, `Optimal Q-Learning parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
+                      } else if (algo === "sarsa") {
+                        // SARSA optimal parameters (for when it's implemented)
+                        setEpisodes(1000)
+                        setAlpha(0.3)
+                        setGamma(0.99)
+                        setEpsilon(0.15)
+                        setTrainingLogs(prev => [...prev, `Optimal SARSA parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
+                      }
+                    }}
                     variant={algorithm === algo ? "default" : "outline"}
                     size="sm"
                     className={
@@ -772,7 +969,9 @@ export default function MazeSolver() {
                         : "border-gray-300 hover:bg-gray-100 text-black text-xs"
                     }
                   >
-                    {algo === "monte_carlo" ? "Monte Carlo" : algo === "sarsa" ? "SARSA" : "Q-Learning"}
+                    {algo === "q_learning" ? "Q-Learning" : 
+                     algo === "monte_carlo" ? "Monte Carlo" : 
+                     "SARSA"}
                   </Button>
                 ))}
               </div>
@@ -780,11 +979,22 @@ export default function MazeSolver() {
 
             <Card className="p-3 bg-white border-gray-300">
               <h2 className="text-sm font-semibold mb-2 text-black underline">Hyperparameters</h2>
+              
+              {/* SARSA Under Development - Remove this block to enable UI */}
+              {algorithm === "sarsa" ? (
+                <div className="p-6 text-center">
+                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
+                    <p className="text-2xl mb-2">🚧</p>
+                    <p className="text-sm font-semibold text-yellow-800 mb-1">SARSA Algorithm</p>
+                    <p className="text-xs text-yellow-700">Under Development</p>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-2">
-                <div>
-                  <label className="text-xs text-gray-600 mb-1 block">
-                    Episodes <span className="text-gray-400">(1-10000)</span>
-                  </label>
+                  <div>
+                    <label className="text-xs text-gray-600 mb-1 block">
+                      Episodes
+                    </label>
                   <Input
                     type="number"
                     value={episodes}
@@ -809,7 +1019,7 @@ export default function MazeSolver() {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Alpha (α) <span className="text-gray-400 text-[10px]">Learning Rate</span>
+                      Alpha (α)
                     </label>
                     <Input
                       type="number"
@@ -834,7 +1044,7 @@ export default function MazeSolver() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Gamma (γ) <span className="text-gray-400 text-[10px]">Discount</span>
+                      Gamma (γ)
                     </label>
                     <Input
                       type="number"
@@ -859,7 +1069,7 @@ export default function MazeSolver() {
                   </div>
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
-                      Epsilon (ε) <span className="text-gray-400 text-[10px]">Greedy Value</span>
+                      Epsilon (ε)
                     </label>
                     <Input
                       type="number"
@@ -883,94 +1093,177 @@ export default function MazeSolver() {
                     )}
                   </div>
                 </div>
+                
+                {/* Monte Carlo specific parameters */}
+                {algorithm.startsWith("monte_carlo") && (
+                  <div className="border-t border-gray-200 pt-2 mt-2">
+                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Monte Carlo Parameters</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">
+                          Method
+                        </label>
+                        <select
+                          value={mcMethod}
+                          onChange={(e) => setMcMethod(e.target.value as "first_visit" | "every_visit")}
+                          className="w-full h-8 text-sm border border-gray-300 rounded bg-white px-2"
+                          disabled={trainingStatus.status === "training"}
+                        >
+                          <option value="first_visit">First-Visit</option>
+                          <option value="every_visit">Every-Visit</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">
+                          ε Decay
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          value={epsilonDecay}
+                          onChange={(e) => setEpsilonDecay(Number(e.target.value))}
+                          className="bg-white h-8 text-sm border-gray-300"
+                          disabled={trainingStatus.status === "training"}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-2">
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Min ε
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={minEpsilon}
+                        onChange={(e) => setMinEpsilon(Number(e.target.value))}
+                        className="bg-white h-8 text-sm border-gray-300"
+                        disabled={trainingStatus.status === "training"}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
+              )}
+              {/* End SARSA block */}
             </Card>
 
-            <Card className="p-3 bg-white border-gray-300">
-              <div className="flex gap-2">
+            <Card className="p-4 bg-white border-gray-300">
+              <div className="space-y-3">
                 <Button
                   onClick={startTraining}
-                  disabled={trainingStatus.status === "training"}
-                  size="sm"
-                  className="flex-1 bg-black text-white hover:bg-gray-800 text-xs"
+                  disabled={trainingStatus.status === "training" || algorithm === "sarsa"}
+                  className="w-full h-12 bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
                 >
                   {trainingStatus.status === "training" ? (
                     <>
-                      <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                      Training...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Training in Progress...
                     </>
                   ) : (
                     <>
-                      <Play className="mr-2 h-3 w-3" />
+                      <Play className="mr-2 h-4 w-4 fill-white" />
                       Start Training
                     </>
                   )}
                 </Button>
-                <Button
-                  onClick={resetEnvironment}
-                  variant="outline"
-                  size="sm"
-                  className="border-gray-300 hover:bg-gray-100 bg-white text-black"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                </Button>
-              </div>
               
-              {trainingStatus.policy && (
-                <div className="mt-2">
+                {trainingStatus.policy && (
                   <Button
                     onClick={simulatePolicy}
                     disabled={isAnimating}
-                    size="sm"
-                    className="w-full bg-green-600 text-white hover:bg-green-700 text-xs"
+                    className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-500 hover:to-green-600 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
                   >
                     {isAnimating ? (
                       <>
-                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                        Simulating...
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Simulating Path...
                       </>
                     ) : (
                       <>
-                        <Play className="mr-2 h-3 w-3" />
-                        Simulate Policy
+                        <Play className="mr-2 h-4 w-4 fill-white" />
+                        Simulate Learned Policy
                       </>
                     )}
                   </Button>
-                </div>
-              )}
+                )}
+                
+                <Button
+                  onClick={resetEnvironment}
+                  variant="outline"
+                  className="w-full h-10 border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-medium text-sm transition-all duration-200"
+                >
+                  <RotateCcw className="mr-2 h-4 w-4" />
+                  Reset Environment
+                </Button>
+              </div>
 
               {trainingStatus.status !== "idle" && (
-                <div className="mt-2 p-2 bg-gray-100 rounded-lg">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-600">Status:</span>
+                <div className="mt-3 p-4 bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-200 shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-bold text-gray-800">Training Status</span>
                     <span
-                      className={
+                      className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-sm ${
                         trainingStatus.status === "completed"
-                          ? "text-green-600"
+                          ? "bg-green-500 text-white"
                           : trainingStatus.status === "error"
-                            ? "text-red-600"
-                            : "text-blue-600"
-                      }
+                            ? "bg-red-500 text-white"
+                            : "bg-blue-500 text-white animate-pulse"
+                      }`}
                     >
-                      {trainingStatus.status}
+                      {trainingStatus.status.toUpperCase()}
                     </span>
                   </div>
-                  {trainingStatus.episode && (
-                    <div className="flex items-center justify-between text-xs mt-1">
-                      <span className="text-gray-600">Progress:</span>
-                      <span className="text-black">
-                        {trainingStatus.episode} / {trainingStatus.total_episodes}
-                      </span>
+                  {trainingStatus.episode && trainingStatus.total_episodes && (
+                    <div>
+                      <div className="flex items-center justify-between text-sm mb-2">
+                        <span className="text-gray-700 font-semibold">Progress</span>
+                        <span className="text-gray-900 font-bold">
+                          {trainingStatus.episode} / {trainingStatus.total_episodes}
+                        </span>
+                      </div>
+                      <div className="relative w-full bg-gray-300 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div
+                          className={`h-3 rounded-full transition-all duration-500 ease-out ${
+                            trainingStatus.status === "completed"
+                              ? "bg-gradient-to-r from-green-400 to-green-600"
+                              : trainingStatus.status === "error"
+                              ? "bg-gradient-to-r from-red-400 to-red-600"
+                              : "bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600"
+                          }`}
+                          style={{
+                            width: `${(trainingStatus.episode / trainingStatus.total_episodes) * 100}%`,
+                          }}
+                        >
+                          {trainingStatus.status === "training" && (
+                            <div 
+                              className="absolute inset-0 opacity-30 animate-shimmer"
+                              style={{
+                                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
+                                backgroundSize: '200% 100%'
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center mt-2">
+                        <span className="text-xs font-semibold text-gray-600">
+                          {Math.round((trainingStatus.episode / trainingStatus.total_episodes) * 100)}% Complete
+                        </span>
+                      </div>
                     </div>
                   )}
-                  {trainingStatus.message && <p className="text-xs text-gray-600 mt-1">{trainingStatus.message}</p>}
+                  {trainingStatus.message && (
+                    <p className="text-xs text-gray-600 mt-3 italic bg-gray-50 p-2 rounded border border-gray-200">
+                      {trainingStatus.message}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>
 
             {trainingLogs.length > 0 && (
               <Card className="p-3 bg-white border-gray-300">
-                <h2 className="text-sm font-semibold mb-2 text-black">Training Logs</h2>
+                <h2 className="text-sm font-semibold mb-2 text-black">Live Logs</h2>
                 <div className="bg-gray-900 rounded-lg p-2 h-40 overflow-y-auto font-mono text-xs">
                   {trainingLogs.map((log, index) => (
                     <div key={index} className="text-green-400 mb-1">
@@ -992,14 +1285,11 @@ export default function MazeSolver() {
                   onClick={generateRandomMaze}
                   variant="outline"
                   size="sm"
-                  className="ml-2 border-purple-300 hover:bg-purple-50 text-purple-700 hover:text-purple-800 flex items-center gap-1"
+                  className="ml-2 border-purple-300 hover:bg-purple-50 text-purple-700 hover:text-purple-800"
                   disabled={isAnimating || trainingStatus.status === "training"}
                   title={`Generate ${nextDifficulty.toUpperCase()} maze`}
                 >
                   <Shuffle className="h-4 w-4" />
-                  <span className="text-xs font-bold">
-                    {nextDifficulty === "easy" ? "E" : nextDifficulty === "medium" ? "M" : "H"}
-                  </span>
                 </Button>
               </div>
               

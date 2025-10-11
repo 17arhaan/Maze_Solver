@@ -16,6 +16,17 @@ class MonteCarloAgent:
         self.policy = np.zeros(n_states, dtype=int)
         self.episode_count = 0
         self.success_count = 0
+        
+        # Metrics tracking
+        self.episode_lengths = []
+        self.episode_returns = []
+        self.discounted_returns = []
+        self.q_value_history = {
+            'mean': [],
+            'max': [],
+            'min': [],
+            'std': []
+        }
 
     def select_action(self, state, epsilon=None):
         if epsilon is None:
@@ -99,10 +110,48 @@ class MonteCarloAgent:
         episode, total_reward, success = self.generate_episode(env, max_steps, epsilon, exploring_start)
         returns = self.calculate_returns(episode)
         self.update_q_values(episode, returns)
+        
+        # Track metrics
+        episode_length = len(episode)
+        discounted_return = returns[0] if len(returns) > 0 else 0
+        
+        self.episode_lengths.append(episode_length)
+        self.episode_returns.append(total_reward)
+        self.discounted_returns.append(discounted_return)
+        self._update_q_value_stats()
+        
         self.episode_count += 1
         if success:
             self.success_count += 1
         return total_reward, success
+    
+    def _update_q_value_stats(self):
+        """Update Q-value statistics"""
+        self.q_value_history['mean'].append(float(np.mean(self.Q)))
+        self.q_value_history['max'].append(float(np.max(self.Q)))
+        self.q_value_history['min'].append(float(np.min(self.Q)))
+        self.q_value_history['std'].append(float(np.std(self.Q)))
+    
+    def get_metrics_summary(self, last_n=100):
+        """Get summary of tracked metrics"""
+        if len(self.episode_returns) == 0:
+            return {}
+        
+        return {
+            'avg_return': float(np.mean(self.episode_returns[-last_n:])),
+            'std_return': float(np.std(self.episode_returns[-last_n:])),
+            'avg_discounted_return': float(np.mean(self.discounted_returns[-last_n:])),
+            'avg_episode_length': float(np.mean(self.episode_lengths[-last_n:])),
+            'min_episode_length': float(np.min(self.episode_lengths[-last_n:])),
+            'avg_td_error': 0.0,  # Not applicable for Monte Carlo
+            'q_value_mean': self.q_value_history['mean'][-1] if self.q_value_history['mean'] else 0.0,
+            'q_value_max': self.q_value_history['max'][-1] if self.q_value_history['max'] else 0.0,
+            'q_value_min': self.q_value_history['min'][-1] if self.q_value_history['min'] else 0.0,
+            'q_value_std': self.q_value_history['std'][-1] if self.q_value_history['std'] else 0.0,
+            'return_p25': float(np.percentile(self.episode_returns[-last_n:], 25)),
+            'return_p50': float(np.percentile(self.episode_returns[-last_n:], 50)),
+            'return_p75': float(np.percentile(self.episode_returns[-last_n:], 75)),
+        }
 
     def get_policy(self, env):
         policy = []
@@ -136,6 +185,17 @@ class MonteCarloAgent:
         self.policy = np.zeros(self.n_states, dtype=int)
         self.episode_count = 0
         self.success_count = 0
+        
+        # Reset metrics
+        self.episode_lengths = []
+        self.episode_returns = []
+        self.discounted_returns = []
+        self.q_value_history = {
+            'mean': [],
+            'max': [],
+            'min': [],
+            'std': []
+        }
 
 
 class MonteCarloESAgent(MonteCarloAgent):

@@ -111,7 +111,11 @@ def start_train(req: TrainRequest):
         'success_rate': None,
         'policy': None,
         'q_table': None,
-        'logs': []
+        'logs': [],
+        'detailed_metrics': None,
+        'q_value_history': None,
+        'episode_returns_history': None,
+        'episode_lengths_history': None
     }
 
     def _train():
@@ -198,6 +202,16 @@ def start_train(req: TrainRequest):
         JOBS[job_id]['policy'] = agent.get_policy(env)
         JOBS[job_id]['q_table'] = agent.Q.tolist()
         
+        # Collect detailed metrics
+        metrics_summary = agent.get_metrics_summary(last_n=100)
+        metrics_summary['training_duration'] = training_duration
+        metrics_summary['episodes_per_sec'] = req.episodes / training_duration
+        
+        JOBS[job_id]['detailed_metrics'] = metrics_summary
+        JOBS[job_id]['q_value_history'] = agent.q_value_history
+        JOBS[job_id]['episode_returns_history'] = agent.episode_returns
+        JOBS[job_id]['episode_lengths_history'] = agent.episode_lengths
+        
         final_success_rate = JOBS[job_id]['success_rate'] * 100 if JOBS[job_id]['success_rate'] else 0
         final_avg_reward = JOBS[job_id]['avg_reward'] if JOBS[job_id]['avg_reward'] else 0
         
@@ -232,6 +246,24 @@ def get_policy(job_id: str):
         'policy': job.get('policy'),
         'q_table': job.get('q_table'),
         'status': job.get('status')
+    }
+
+@app.get('/metrics/{job_id}')
+def get_detailed_metrics(job_id: str):
+    """Get detailed performance metrics for a training job"""
+    job = JOBS.get(job_id)
+    if not job:
+        logger.warning(f"Metrics request for unknown job: {job_id[:8]}")
+        return {'error': 'job not found'}
+    
+    return {
+        'status': job.get('status'),
+        'detailed_metrics': job.get('detailed_metrics'),
+        'q_value_history': job.get('q_value_history'),
+        'episode_returns_history': job.get('episode_returns_history'),
+        'episode_lengths_history': job.get('episode_lengths_history'),
+        'success_rate': job.get('success_rate'),
+        'avg_reward': job.get('avg_reward')
     }
 
 @app.post('/compare')

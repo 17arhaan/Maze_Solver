@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
-import { Loader2, Play, RotateCcw, TrendingUp, Shuffle } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Loader2, Play, RotateCcw, TrendingUp, Shuffle, BarChart3 } from "lucide-react"
 
 type Algorithm = "q_learning" | "monte_carlo" | "sarsa"
 
@@ -27,6 +28,39 @@ interface TrainingStatus {
   message?: string
   policy?: (number | null)[][]
   rewards?: number[]
+}
+
+interface DetailedMetrics {
+  avg_return: number
+  std_return: number
+  avg_discounted_return: number
+  avg_episode_length: number
+  min_episode_length: number
+  avg_td_error: number
+  q_value_mean: number
+  q_value_max: number
+  q_value_min: number
+  q_value_std: number
+  return_p25: number
+  return_p50: number
+  return_p75: number
+  training_duration: number
+  episodes_per_sec: number
+}
+
+interface MetricsResponse {
+  status: string
+  detailed_metrics: DetailedMetrics | null
+  q_value_history: {
+    mean: number[]
+    max: number[]
+    min: number[]
+    std: number[]
+  } | null
+  episode_returns_history: number[] | null
+  episode_lengths_history: number[] | null
+  success_rate: number | null
+  avg_reward: number | null
 }
 
 export default function MazeSolver() {
@@ -59,6 +93,9 @@ export default function MazeSolver() {
   const [mazeComplexity, setMazeComplexity] = useState<"easy" | "medium" | "hard">("medium")
   const [pathLength, setPathLength] = useState<number>(0)
   const [nextDifficulty, setNextDifficulty] = useState<"easy" | "medium" | "hard">("hard")
+  const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false)
+  const [detailedMetrics, setDetailedMetrics] = useState<MetricsResponse | null>(null)
+  const [loadingMetrics, setLoadingMetrics] = useState(false)
 
   useEffect(() => {
     const initialMaze = [
@@ -612,8 +649,37 @@ export default function MazeSolver() {
       setSimulationFailed(false)
       setFailureReason("")
       setTrainingLogs([])
+      setDetailedMetrics(null)
     } catch (error) {
       console.error("Failed to reset:", error)
+    }
+  }
+
+  const fetchDetailedMetrics = async () => {
+    if (!jobId) {
+      setTrainingLogs(prev => [...prev, "⚠️ No training job available to fetch metrics"])
+      return
+    }
+
+    setLoadingMetrics(true)
+    try {
+      const response = await fetch(`http://localhost:8000/metrics/${jobId}`)
+      const data: MetricsResponse = await response.json()
+      
+      if (data.status === "finished" && data.detailed_metrics) {
+        setDetailedMetrics(data)
+        setIsMetricsModalOpen(true)
+        setTrainingLogs(prev => [...prev, "📊 Detailed metrics loaded successfully"])
+      } else if (data.status === "running" || data.status === "queued") {
+        setTrainingLogs(prev => [...prev, "⏳ Training still in progress. Complete training first."])
+      } else {
+        setTrainingLogs(prev => [...prev, "⚠️ Metrics not available yet"])
+      }
+    } catch (error) {
+      console.error("Failed to fetch metrics:", error)
+      setTrainingLogs(prev => [...prev, "❌ Error fetching detailed metrics"])
+    } finally {
+      setLoadingMetrics(false)
     }
   }
 
@@ -1195,6 +1261,26 @@ export default function MazeSolver() {
                   <RotateCcw className="mr-2 h-4 w-4" />
                   Reset Environment
                 </Button>
+
+                {trainingStatus.status === "completed" && jobId && (
+                  <Button
+                    onClick={fetchDetailedMetrics}
+                    disabled={loadingMetrics}
+                    className="w-full h-10 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 text-white font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    {loadingMetrics ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Loading Metrics...
+                      </>
+                    ) : (
+                      <>
+                        <BarChart3 className="mr-2 h-4 w-4" />
+                        Detailed Report
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
 
               {trainingStatus.status !== "idle" && (
@@ -1375,21 +1461,180 @@ export default function MazeSolver() {
               </Card>
             )}
 
-            {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
+            {trainingLogs.length > 0 && (
               <Card className="p-3 bg-white border-gray-300">
                 <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
                   <TrendingUp className="h-4 w-4" />
-                  Reward Curve
+                  Live Training Logs
                 </h2>
-                <SimpleRewardChart 
-                  rewards={trainingStatus.rewards} 
-                  totalEpisodes={trainingStatus.total_episodes}
-                />
+                <div className="bg-gray-900 rounded-lg p-3 max-h-[300px] overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+                  {trainingLogs.slice(-15).map((log, index) => (
+                    <div key={index} className="whitespace-pre-wrap break-words">
+                      {log}
+                    </div>
+                  ))}
+                  {trainingStatus.status === "training" && (
+                    <div className="animate-pulse text-yellow-400">
+                      ⚡ Training in progress...
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 text-xs text-gray-500 text-center">
+                  Showing last 15 log entries • Complete metrics in Detailed Report
+                </div>
               </Card>
             )}
           </div>
         </div>
       </div>
+
+      {/* Detailed Metrics Modal */}
+      <Dialog open={isMetricsModalOpen} onOpenChange={setIsMetricsModalOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-gray-900">📊 Detailed Performance Report</DialogTitle>
+            <DialogDescription className="text-gray-600">
+              Comprehensive metrics and visualizations from training
+            </DialogDescription>
+          </DialogHeader>
+
+          {detailedMetrics && detailedMetrics.detailed_metrics && (
+            <div className="space-y-6 mt-4">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-300">
+                  <div className="text-sm text-blue-700 font-semibold mb-1">Success Rate</div>
+                  <div className="text-2xl font-bold text-blue-900">
+                    {((detailedMetrics.success_rate || 0) * 100).toFixed(1)}%
+                  </div>
+                </Card>
+                <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-300">
+                  <div className="text-sm text-green-700 font-semibold mb-1">Avg Episode Length</div>
+                  <div className="text-2xl font-bold text-green-900">
+                    {detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}
+                  </div>
+                </Card>
+                <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300">
+                  <div className="text-sm text-purple-700 font-semibold mb-1">Avg Return</div>
+                  <div className="text-2xl font-bold text-purple-900">
+                    {detailedMetrics.detailed_metrics.avg_return.toFixed(2)}
+                  </div>
+                </Card>
+                <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-300">
+                  <div className="text-sm text-orange-700 font-semibold mb-1">Training Time</div>
+                  <div className="text-2xl font-bold text-orange-900">
+                    {detailedMetrics.detailed_metrics.training_duration.toFixed(1)}s
+                  </div>
+                </Card>
+              </div>
+
+              {/* Reward Curve */}
+              {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
+                <Card className="p-6 bg-white border-gray-300">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Training Progress - Reward Curve
+                  </h3>
+                  <SimpleRewardChart 
+                    rewards={trainingStatus.rewards} 
+                    totalEpisodes={trainingStatus.total_episodes}
+                  />
+                </Card>
+              )}
+
+              {/* Quantitative Metrics */}
+              <Card className="p-6 bg-white border-gray-300">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">📈 Quantitative Metrics</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">Undiscounted Return</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_return.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500 mt-1">Std: {detailedMetrics.detailed_metrics.std_return.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">Discounted Return</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_discounted_return.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500 mt-1">With gamma decay applied</div>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">Avg Episode Length</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}</div>
+                    <div className="text-xs text-gray-500 mt-1">Min: {detailedMetrics.detailed_metrics.min_episode_length.toFixed(0)} steps</div>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">TD Error</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_td_error.toFixed(3)}</div>
+                    <div className="text-xs text-gray-500 mt-1">{detailedMetrics.detailed_metrics.avg_td_error === 0 ? 'N/A for Monte Carlo' : 'Prediction accuracy'}</div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Q-Value Statistics */}
+              <Card className="p-6 bg-white border-gray-300">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">🎯 Q-Value Statistics</h3>
+                <div className="grid grid-cols-4 gap-4 text-sm">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-blue-700 font-medium mb-1">Mean</div>
+                    <div className="text-xl font-bold text-blue-900">{detailedMetrics.detailed_metrics.q_value_mean.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-green-50 rounded-lg">
+                    <div className="text-green-700 font-medium mb-1">Max</div>
+                    <div className="text-xl font-bold text-green-900">{detailedMetrics.detailed_metrics.q_value_max.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg">
+                    <div className="text-red-700 font-medium mb-1">Min</div>
+                    <div className="text-xl font-bold text-red-900">{detailedMetrics.detailed_metrics.q_value_min.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-purple-50 rounded-lg">
+                    <div className="text-purple-700 font-medium mb-1">Std Dev</div>
+                    <div className="text-xl font-bold text-purple-900">{detailedMetrics.detailed_metrics.q_value_std.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                  <strong>Interpretation:</strong> Q-values represent the expected total reward. Max values should be near goal states, with values decreasing farther from the goal.
+                </div>
+              </Card>
+
+              {/* Return Distribution */}
+              <Card className="p-6 bg-white border-gray-300">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">📊 Return Distribution (Percentiles)</h3>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div className="p-3 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                    <div className="text-yellow-700 font-medium mb-1">25th Percentile</div>
+                    <div className="text-xl font-bold text-yellow-900">{detailedMetrics.detailed_metrics.return_p25.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-orange-50 rounded-lg border-2 border-orange-300">
+                    <div className="text-orange-700 font-medium mb-1">50th Percentile (Median)</div>
+                    <div className="text-xl font-bold text-orange-900">{detailedMetrics.detailed_metrics.return_p50.toFixed(2)}</div>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg border-2 border-red-300">
+                    <div className="text-red-700 font-medium mb-1">75th Percentile</div>
+                    <div className="text-xl font-bold text-red-900">{detailedMetrics.detailed_metrics.return_p75.toFixed(2)}</div>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                  <strong>Interpretation:</strong> Narrow range (p75 - p25) indicates consistent performance. Wide range suggests high variance.
+                </div>
+              </Card>
+
+              {/* Training Efficiency */}
+              <Card className="p-6 bg-white border-gray-300">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">⚡ Training Efficiency</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">Total Training Time</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.training_duration.toFixed(2)} seconds</div>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1">Training Speed</div>
+                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.episodes_per_sec.toFixed(1)} eps/sec</div>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

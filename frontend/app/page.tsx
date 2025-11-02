@@ -2403,26 +2403,26 @@ export default function MazeSolver() {
                     z: Array.from({ length: 16 }, (_, row) =>
                       Array.from({ length: 17 }, (_, col) => {
                         const stateIndex = row * 17 + col
-                        if (maze[row][col] === 0) return null // Wall
+                        if (maze[row][col] === 0) return null
                         const qValues = qTable[stateIndex]
                         return Math.max(...qValues)
                       })
                     ),
                     colorscale: [
-                      ['0.0', 'rgb(0,0,255)'],
-                      ['0.25', 'rgb(0,255,255)'],
-                      ['0.5', 'rgb(0,255,0)'],
-                      ['0.75', 'rgb(255,255,0)'],
-                      ['1.0', 'rgb(255,0,0)']
+                      [0.0, 'rgb(0,0,255)'],
+                      [0.25, 'rgb(0,255,255)'],
+                      [0.5, 'rgb(0,255,0)'],
+                      [0.75, 'rgb(255,255,0)'],
+                      [1.0, 'rgb(255,0,0)']
                     ],
                     showscale: true,
                     colorbar: {
-                      title: 'Max Q-Value',
+                      title: { text: 'Max Q-Value' },
                       titleside: 'right',
                       titlefont: { size: 14 }
                     },
                     hovertemplate: 'Row: %{y}<br>Col: %{x}<br>Max Q: %{z:.2f}<extra></extra>',
-                  }
+                  } as any
                 ]}
                 layout={{
                   autosize: true,
@@ -2431,9 +2431,9 @@ export default function MazeSolver() {
                     font: { size: 18, family: 'Arial, sans-serif' }
                   },
                   scene: {
-                    xaxis: { title: 'Column', gridcolor: '#ddd' },
-                    yaxis: { title: 'Row', gridcolor: '#ddd' },
-                    zaxis: { title: 'Max Q-Value', gridcolor: '#ddd' },
+                    xaxis: { title: { text: 'Column' }, gridcolor: '#ddd' },
+                    yaxis: { title: { text: 'Row' }, gridcolor: '#ddd' },
+                    zaxis: { title: { text: 'Max Q-Value' }, gridcolor: '#ddd' },
                     camera: {
                       eye: { x: 1.5, y: 1.5, z: 1.3 }
                     }

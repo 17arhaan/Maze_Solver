@@ -1,199 +1,152 @@
-# 📚 Maze Solver - Documentation
+# Documentation
 
-Comprehensive documentation for the Maze Solver reinforcement learning project.
-
----
-
-## 📖 Available Documentation
-
-### **1. [Maze Generation Algorithm](./MAZE_GENERATION_ALGORITHM.md)**
-Complete guide to how random mazes are generated, including:
-- Recursive Backtracking algorithm explanation
-- Step-by-step visual examples
-- Difficulty control mechanisms
-- BFS path validation
-- Code implementation details
-- Mathematical analysis
-- Educational applications
-
-**Topics covered:**
-- 🏗️ How the algorithm works
-- 🎯 Difficulty classification (Easy/Medium/Hard)
-- 🔄 Cycling system
-- 📊 Path length calculation
-- 🧪 Testing and validation
-- 🎓 Educational use cases
+Simple guides to understand and use the Maze Solver.
 
 ---
 
-## 🎯 Quick Links
+## 📚 Quick Navigation
 
-### **Algorithm Documentation**
-- [Recursive Backtracking Explained](./MAZE_GENERATION_ALGORITHM.md#algorithm-recursive-backtracking)
-- [Step-by-Step Process](./MAZE_GENERATION_ALGORITHM.md#step-by-step-process)
-- [Difficulty Control](./MAZE_GENERATION_ALGORITHM.md#difficulty-control)
-- [Visual Examples](./MAZE_GENERATION_ALGORITHM.md#visual-examples)
+### [Getting Started](./GETTING_STARTED.md)
+**Start here!** Learn how to use the app in 5 minutes.
+- Pick an algorithm
+- Train your agent
+- Watch it solve mazes
+- Fix common issues
 
-### **Project Documentation**
-- [Main README](../readme.md) - Project overview and RL algorithms
-- [Setup Instructions](../SETUP_INSTRUCTIONS.md) - How to run the project
-- [Integration Changes](../INTEGRATION_CHANGES.md) - Frontend-Backend connection
+### [Algorithms Explained](./ALGORITHMS.md)
+Understand the three learning methods:
+- Q-Learning (recommended)
+- SARSA (safer approach)
+- Monte Carlo (needs more training)
+
+### [Features Guide](./FEATURES.md)
+Everything you can do:
+- Training & monitoring
+- Maze generation & editing
+- Visualizations & metrics
+- Tips & tricks
 
 ---
 
-## 🧠 Reinforcement Learning Algorithms
+## 🎯 What is This Project?
 
-The project implements three core RL algorithms:
+An AI that learns to solve mazes through trial and error (reinforcement learning).
 
-### **1. Monte Carlo (MC)**
-- Learns from complete episodes
-- No bootstrapping
-- High variance, unbiased
+**How it works:**
+1. Agent starts knowing nothing
+2. Tries random moves at first
+3. Gets rewards for good moves (reaching goal)
+4. Gets penalties for bad moves (hitting walls)
+5. Learns the best path through practice
 
-### **2. SARSA (On-Policy TD)**
+**Real-world applications:**
+- Robot navigation
+- Game AI
+- Route optimization
+- Self-driving cars
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# Start both servers
+./start.sh
+
+# Open browser
+http://localhost:3000
+
+# Click "Start Training"
+# Click "Simulate Policy"
+# Watch the magic! ✨
+```
+
+---
+
+## 🎮 Basic Concepts
+
+### States
+Every position in the maze (272 total positions in a 16×17 grid)
+
+### Actions
+4 moves the agent can make: Up, Down, Left, Right
+
+### Rewards
+- **+10** Reach the goal 🎯
+- **-1** Each step (encourages efficiency)
+- **-5** Hit a wall 🧱
+
+### Policy
+The agent's "strategy" - which action to take at each position
+
+---
+
+## 🧠 Learning Parameters
+
+**Episodes:** How many practice runs (more = better but slower)
+**Alpha (α):** Learning speed (0.3 is good)
+**Gamma (γ):** Planning ahead (0.99 for mazes)
+**Epsilon (ε):** Exploration vs using knowledge (0.15 is balanced)
+
+**Don't worry!** The app sets these automatically. 😊
+
+---
+
+## 📊 Success Tips
+
+✅ Use default settings first
+✅ Try Q-Learning (fastest, most reliable)
+✅ Give it enough episodes (1000+)
+✅ Test on different mazes
+✅ Check the detailed report to see metrics
+
+---
+
+## 🎓 For Students
+
+This project demonstrates:
 - Temporal Difference learning
-- Follows current policy
-- Safer in stochastic environments
+- Value-based reinforcement learning
+- Exploration vs exploitation
+- Policy optimization
+- Markov Decision Processes
 
-### **3. Q-Learning (Off-Policy TD)** ⭐
-- Currently implemented
-- Learns optimal policy
-- Fast convergence
-
-**For RL theory:** See [main README](../readme.md)
-
----
-
-## 🎮 Features
-
-- ✅ Real-time training visualization
-- ✅ Interactive maze environment
-- ✅ Random maze generation (Easy/Medium/Hard)
-- ✅ Policy simulation with animations
-- ✅ Success/failure detection
-- ✅ Intelligent hyperparameter suggestions
-- ✅ Training logs and metrics
+Great for:
+- Learning RL concepts
+- Running experiments
+- Comparing algorithms
+- Understanding parameters
 
 ---
 
-## 🏗️ Architecture
+## 🔗 Project Structure
 
 ```
-Maze Solver/
-├── frontend/          # Next.js React app
-│   ├── app/
-│   │   ├── page.tsx   # Main UI with maze generator
-│   │   └── layout.tsx
-│   └── components/    # UI components
-│
-├── backend/           # FastAPI Python server
-│   ├── app.py         # API endpoints
-│   ├── envs/
-│   │   └── maze_env.py  # MDP environment
-│   └── agents/
-│       └── q_learning.py # Q-Learning agent
-│
-└── documentation/     # Project documentation
-    ├── README.md      # This file
-    └── MAZE_GENERATION_ALGORITHM.md
+Maze_Solver/
+├── frontend/        Next.js web interface
+├── backend/         FastAPI + RL agents
+└── documentation/   This folder!
 ```
 
 ---
 
-## 🔬 Technical Specifications
+## 🆘 Need Help?
 
-### **Maze Environment**
-- **Grid Size:** 16 rows × 17 columns (272 states)
-- **Start Position:** (0, 1) - Top-left area
-- **Goal Position:** (15, 15) - Bottom-right
-- **Actions:** 4 (Up, Down, Left, Right)
-- **Encoding:** 0=wall, 1=path, 2=start, 3=goal
-
-### **Rewards**
-- **+10** - Reach goal
-- **-1** - Each step (encourages efficiency)
-- **-5** - Hit wall (discourages invalid moves)
-
-### **Q-Learning Parameters**
-- **Alpha (α):** Learning rate (0.01 - 1.0)
-- **Gamma (γ):** Discount factor (0.5 - 1.0)
-- **Epsilon (ε):** Exploration rate (0.0 - 1.0)
-- **Episodes:** Training iterations (1 - 10,000)
+1. Check [Getting Started](./GETTING_STARTED.md) for basics
+2. Read [Features Guide](./FEATURES.md) for specific features
+3. See troubleshooting in Getting Started
+4. Check the training logs for hints
 
 ---
 
-## 🎓 For Students and Researchers
+## 👥 Created By
 
-### **Experiment Ideas**
-
-1. **Maze Complexity Study**
-   - Compare learning curves across Easy/Medium/Hard mazes
-   - Measure episodes needed for 90% success rate
-   - Analyze optimal path discovery
-
-2. **Hyperparameter Optimization**
-   - Grid search over α, γ, ε
-   - Plot success rate vs parameters
-   - Find optimal settings per difficulty
-
-3. **Algorithm Comparison**
-   - Implement Monte Carlo and SARSA
-   - Compare convergence speed
-   - Analyze sample efficiency
-
-4. **Generalization Testing**
-   - Train on multiple random mazes
-   - Test transfer learning
-   - Measure policy robustness
-
----
-
-## 📊 Key Metrics
-
-**Training Metrics:**
-- Episode count
-- Average reward per episode
-- Success rate (% reaching goal)
-- Convergence speed
-
-**Policy Metrics:**
-- Path length (steps to goal)
-- Optimality (vs shortest path)
-- Robustness (success on new mazes)
-- Exploration coverage (states visited)
-
----
-
-## 🔗 Related Resources
-
-### **External Resources**
-- [Sutton & Barto - RL Book](http://incompleteideas.net/book/the-book-2nd.html)
-- [OpenAI Gym](https://gymnasium.farama.org/)
-- [Maze Generation Algorithms](http://weblog.jamisbuck.org/2011/2/7/maze-generation-algorithm-recap)
-
-### **Project Files**
-- `backend/agents/q_learning.py` - Q-Learning implementation
-- `backend/envs/maze_env.py` - MDP environment
-- `frontend/app/page.tsx` - UI with maze generator
-
----
-
-## 👥 Authors
-
-**Arhaan Girdhar** - 220962050  
+**Arhaan Girdhar** - 220962050
 **Anbar Althaf** - 220962051
 
-*CSE 4478 – Reinforcement Learning*  
-Department of Computer Science and Engineering (AI & ML)
+CSE 4478 – Reinforcement Learning  
+Department of CSE (AI & ML)
 
 ---
 
-## 📜 License
-
-MIT License - Free for academic and research use
-
----
-
-**Last Updated:** October 2025  
-**Version:** 1.0
-
+**Happy Learning! 🚀**

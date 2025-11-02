@@ -148,7 +148,84 @@ avg_td_error = mean(abs(td_errors[-1000:]))
 
 ---
 
-#### 6. **Episode Length / Steps to Goal** ⭐ NEW
+#### 6. **Training Loss (Mean Squared Bellman Error)** ⭐ NEW
+- **Formula (Q-Learning):** `Loss = mean((δ_t)²)` where `δ_t = r + γ × max(Q(s',a')) - Q(s,a)`
+- **Formula (Monte Carlo):** `Loss = mean((G_t - Q(s,a))²)` where `G_t` is actual return
+- **Type:** Quantitative
+- **Range:** 0 to +∞ (always non-negative)
+- **Tracked:** Per episode average
+
+**Justification:**
+- **Standard ML/RL loss metric** - squared error is foundational in supervised learning and TD methods
+- **Measures value function approximation quality** - how well Q-values predict expected returns
+- **Training convergence indicator** - decreasing loss shows learning progress
+- **Used in DQN and modern deep RL** - loss minimization is the training objective
+- **Algorithm-agnostic** - applicable to both TD and Monte Carlo methods
+- **Early stopping criterion** - can halt training when loss plateaus
+
+**Theoretical Foundation:**
+- Q-Learning minimizes the **Mean Squared Bellman Error (MSBE)**
+- Monte Carlo minimizes squared prediction error between Q-values and actual returns
+- Related to the **Bellman optimality equation** residual
+- Foundation of value function approximation in deep RL (DQN, A3C, etc.)
+
+**Implementation:**
+
+```python
+# Q-Learning
+for each step:
+    td_error = reward + gamma * max(Q[next_state]) - Q[state, action]
+    squared_error = td_error ** 2
+episode_loss = mean(squared_errors)
+
+# Monte Carlo  
+for each state-action in episode:
+    prediction_error = actual_return - old_q_value
+    squared_error = prediction_error ** 2
+episode_loss = mean(squared_errors)
+```
+
+**Tracked Metrics:**
+- `training_loss`: Mean squared error averaged over last 100 episodes
+- `final_loss`: Loss value from the last episode
+- `loss_history`: Array of per-episode losses for visualization
+
+**Interpretation:**
+- **High loss (>10):** Q-values are inaccurate, far from true values
+- **Decreasing trend:** Agent improving value estimates, learning in progress
+- **Low loss (<0.1):** Q-values converged, accurate value function
+- **Plateau:** Convergence reached, diminishing returns from more training
+- **Increasing loss:** Potential overfitting, instability, or hyperparameter issues
+
+**Expected Patterns:**
+- **Early training:** High and volatile loss (exploration phase)
+- **Mid training:** Steadily decreasing loss (learning phase)
+- **Late training:** Low and stable loss (convergence phase)
+
+**Comparison Between Algorithms:**
+- **Q-Learning:** Loss typically decreases faster due to off-policy learning
+- **Monte Carlo:** Loss may be higher initially but more stable (unbiased estimates)
+- **Lower final loss ≠ better policy** - loss measures prediction accuracy, not optimality
+
+**Usage in Debugging:**
+- **Loss not decreasing:** Learning rate too low, poor exploration, or insufficient training
+- **Loss exploding:** Learning rate too high, Q-value divergence
+- **Loss oscillating:** Need epsilon decay, unstable environment sampling
+
+**Academic References:**
+- Sutton & Barto (2018): "Reinforcement Learning: An Introduction" - Chapter 11 on Off-policy Methods
+- Mnih et al. (2015): "Human-level control through deep reinforcement learning" (DQN paper) - Uses MSE loss
+- van Hasselt et al. (2016): "Deep Reinforcement Learning with Double Q-learning" - Discusses overestimation bias
+
+**Why MSE (not MAE)?**
+- **Penalizes large errors more heavily** - quadratic vs linear penalty
+- **Mathematically convenient** - differentiable, convex for linear approximators
+- **Standard in RL literature** - DQN, TD(λ), GTD all use squared error
+- **Aligns with variance minimization** - relates to statistical efficiency
+
+---
+
+#### 7. **Episode Length / Steps to Goal** ⭐ NEW
 - **Formula:** `Number of actions taken per episode`
 - **Type:** Quantitative
 - **Range:** 1 to max_steps
@@ -177,7 +254,7 @@ min_episode_length = min(episode_lengths[-100:])
 
 ---
 
-#### 7. **Q-Value Statistics (Mean, Max, Min, Std)** ⭐ NEW
+#### 8. **Q-Value Statistics (Mean, Max, Min, Std)** ⭐ NEW
 - **Formula:** Statistical measures of Q-table
 - **Type:** Quantitative
 - **Tracked:** After each episode

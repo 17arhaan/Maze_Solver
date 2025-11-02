@@ -12,6 +12,7 @@ This document summarizes the implementation of advanced performance metrics and 
 #### **Q-Learning Agent** (`backend/agents/q_learning.py`)
 Added comprehensive metrics tracking:
 - **TD Error (Temporal Difference)**: Tracks prediction accuracy after each step
+- **Training Loss (MSBE)**: Mean Squared Bellman Error per episode
 - **Episode Returns**: Both undiscounted and discounted (with gamma decay)
 - **Episode Lengths**: Number of steps per episode
 - **Q-Value Statistics**: Mean, Max, Min, Std Dev tracked after each episode
@@ -22,7 +23,8 @@ Added comprehensive metrics tracking:
 - `get_metrics_summary(last_n=100)`: Returns comprehensive metrics summary
 
 #### **Monte Carlo Agent** (`backend/agents/monte_carlo.py`)
-Added similar metrics tracking (TD Error N/A for Monte Carlo):
+Added similar metrics tracking:
+- **Training Loss (MSE)**: Mean Squared prediction error per episode
 - **Episode Returns**: Undiscounted and discounted
 - **Episode Lengths**: Steps per episode
 - **Q-Value Statistics**: Mean, Max, Min, Std Dev
@@ -43,7 +45,8 @@ JOBS dictionary now includes:
   'detailed_metrics': None,           # Metrics summary
   'q_value_history': None,            # Q-value evolution over episodes
   'episode_returns_history': None,    # Returns for all episodes
-  'episode_lengths_history': None     # Lengths for all episodes
+  'episode_lengths_history': None,    # Lengths for all episodes
+  'loss_history': None                # Training loss over episodes
 }
 ```
 
@@ -56,6 +59,7 @@ Returns detailed performance metrics including:
 - Q-value history (mean, max, min, std over episodes)
 - Episode returns history
 - Episode lengths history
+- Training loss history (Mean Squared Error over episodes)
 - Success rate and average reward
 
 **Usage:**
@@ -94,18 +98,24 @@ Full-screen dialog (`max-w-6xl`) with scrollable content showing:
    - Discounted Return
    - Avg Episode Length (with min)
    - TD Error (N/A for Monte Carlo)
+   - Training Loss (MSE) with final loss value
 
-3. **Q-Value Statistics**
+3. **Training Loss Curve**
+   - Visualization of Mean Squared Error over episodes
+   - Shows convergence and learning progress
+   - Indigo-colored bars with min/max indicators
+
+4. **Q-Value Statistics**
    - Mean, Max, Min, Std Dev
    - Color-coded cards (Blue, Green, Red, Purple)
    - Interpretation guide
 
-4. **Return Distribution (Percentiles)**
+5. **Return Distribution (Percentiles)**
    - 25th, 50th (Median), 75th percentiles
    - Color-coded (Yellow, Orange, Red)
    - Variance interpretation
 
-5. **Training Efficiency**
+6. **Training Efficiency**
    - Total training time
    - Episodes per second
 
@@ -157,14 +167,16 @@ Comprehensive 300+ line documentation covering:
 ✅ Training Time
 
 ### New Advanced Metrics (Implemented)
-✅ **Return (Cumulative Discounted Reward)** - Metric #1
-✅ **TD Error (Temporal Difference Error)** - Metric #9
-✅ **Episode Length / Steps to Goal** - Metric #10
-✅ **Q-Value Statistics (Mean, Max, Min, Std)** - Metric #11
+✅ **Return (Cumulative Discounted Reward)** - Metric #4
+✅ **TD Error (Temporal Difference Error)** - Metric #5
+✅ **Training Loss (Mean Squared Bellman Error)** - Metric #6 ⭐ LATEST
+✅ **Episode Length / Steps to Goal** - Metric #7
+✅ **Q-Value Statistics (Mean, Max, Min, Std)** - Metric #8
 
 ### Visual/Qualitative (Enhanced)
 ✅ Policy Visualization (existing)
-✅ Learning Curves (moved to detailed report)
+✅ Learning Curves - Reward (moved to detailed report)
+✅ Learning Curves - Training Loss (new visualization) ⭐ LATEST
 ✅ Live Training Logs (new, replaces curve on main page)
 ✅ Detailed Metrics Dashboard (new modal)
 
@@ -205,6 +217,7 @@ JOBS[job_id]['detailed_metrics'] = metrics_summary
 JOBS[job_id]['q_value_history'] = agent.q_value_history
 JOBS[job_id]['episode_returns_history'] = agent.episode_returns
 JOBS[job_id]['episode_lengths_history'] = agent.episode_lengths
+JOBS[job_id]['loss_history'] = agent.loss_history
 ```
 
 ---
@@ -354,11 +367,11 @@ npm run dev
 ## 🎉 Summary
 
 Successfully implemented:
-- **4 new quantitative metrics** (Return, TD Error, Episode Length, Q-Stats)
-- **1 new visual metric** (Live Logs)
-- **1 comprehensive modal** (Detailed Report)
+- **5 new quantitative metrics** (Return, TD Error, Training Loss, Episode Length, Q-Stats)
+- **2 new visual metrics** (Live Logs, Training Loss Curve)
+- **1 comprehensive modal** (Detailed Report with Loss Visualization)
 - **1 new API endpoint** (/metrics/{job_id})
-- **1 complete documentation** (METRICS_DOCUMENTATION.md)
+- **1 complete documentation** (METRICS_DOCUMENTATION.md with Training Loss section)
 
 All changes are production-ready, well-documented, and follow best practices for RL performance evaluation.
 

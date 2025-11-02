@@ -14,6 +14,7 @@ from datetime import datetime
 from envs.maze_env import MazeEnv
 from agents.q_learning import QLearningAgent
 from agents.monte_carlo import MonteCarloAgent
+from agents.sarsa import SarsaAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -115,7 +116,8 @@ def start_train(req: TrainRequest):
         'detailed_metrics': None,
         'q_value_history': None,
         'episode_returns_history': None,
-        'episode_lengths_history': None
+        'episode_lengths_history': None,
+        'loss_history': None
     }
 
     def _train():
@@ -154,9 +156,8 @@ def start_train(req: TrainRequest):
             agent = MonteCarloAgent(env.n_states, env.n_actions, gamma=req.gamma, epsilon=mc_epsilon, method=req.mc_method, optimistic_init=optimistic_init)
             logger.info(f"[{job_id[:8]}] Monte Carlo agent initialized (method: {req.mc_method}, initial_ε={mc_epsilon}, optimistic_init={optimistic_init}, exploring_starts=enabled)")
         elif req.algorithm == "sarsa":
-            logger.warning(f"[{job_id[:8]}] SARSA not implemented yet, using Q-Learning instead")
-            agent = QLearningAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
-            logger.info(f"[{job_id[:8]}] Q-Learning agent initialized (placeholder for SARSA)")
+            agent = SarsaAgent(env.n_states, env.n_actions, alpha=req.alpha, gamma=req.gamma, epsilon=req.epsilon)
+            logger.info(f"[{job_id[:8]}] SARSA agent initialized")
         else:
             logger.error(f"[{job_id[:8]}] Unknown algorithm: {req.algorithm}")
             JOBS[job_id]['status'] = 'error'
@@ -211,6 +212,7 @@ def start_train(req: TrainRequest):
         JOBS[job_id]['q_value_history'] = agent.q_value_history
         JOBS[job_id]['episode_returns_history'] = agent.episode_returns
         JOBS[job_id]['episode_lengths_history'] = agent.episode_lengths
+        JOBS[job_id]['loss_history'] = agent.loss_history
         
         final_success_rate = JOBS[job_id]['success_rate'] * 100 if JOBS[job_id]['success_rate'] else 0
         final_avg_reward = JOBS[job_id]['avg_reward'] if JOBS[job_id]['avg_reward'] else 0
@@ -262,6 +264,7 @@ def get_detailed_metrics(job_id: str):
         'q_value_history': job.get('q_value_history'),
         'episode_returns_history': job.get('episode_returns_history'),
         'episode_lengths_history': job.get('episode_lengths_history'),
+        'loss_history': job.get('loss_history'),
         'success_rate': job.get('success_rate'),
         'avg_reward': job.get('avg_reward')
     }

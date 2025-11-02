@@ -37,6 +37,8 @@ interface DetailedMetrics {
   avg_episode_length: number
   min_episode_length: number
   avg_td_error: number
+  training_loss: number
+  final_loss: number
   q_value_mean: number
   q_value_max: number
   q_value_min: number
@@ -59,6 +61,7 @@ interface MetricsResponse {
   } | null
   episode_returns_history: number[] | null
   episode_lengths_history: number[] | null
+  loss_history: number[] | null
   success_rate: number | null
   avg_reward: number | null
 }
@@ -924,20 +927,20 @@ export default function MazeSolver() {
     const startEpisode = actualTotal > rewards.length ? actualTotal - rewards.length + 1 : 1
 
     return (
-      <div className="space-y-2">
+      <div className="space-y-1">
         <div className="flex justify-between text-xs text-gray-600">
           <span>Episode {startEpisode}</span>
           <span>Episode {actualTotal}</span>
         </div>
-        <div className="h-32 bg-gray-50 rounded-lg p-2 flex items-end gap-px">
+        <div className="h-24 bg-gray-50 rounded-lg p-2 flex items-end" style={{ gap: '1px' }}>
           {rewards.map((reward, index) => {
             const height = ((reward - minReward) / range) * 100
             const actualEpisode = startEpisode + index
             return (
               <div
                 key={index}
-                className="flex-1 bg-black rounded-t transition-all"
-                style={{ height: `${Math.max(height, 2)}%` }}
+                className="flex-1 bg-black rounded-t-sm transition-all"
+                style={{ height: `${Math.max(height, 5)}%`, minWidth: '2px' }}
                 title={`Episode ${actualEpisode}: ${reward.toFixed(2)}`}
               />
             )
@@ -950,6 +953,53 @@ export default function MazeSolver() {
         {actualTotal > rewards.length && (
           <p className="text-xs text-gray-500 italic text-center">
             Showing last {rewards.length} of {actualTotal} episodes
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const SimpleLossChart = ({ losses, totalEpisodes }: { losses: number[], totalEpisodes?: number }) => {
+    if (!losses || losses.length === 0) return null
+
+    const maxLoss = Math.max(...losses)
+    const minLoss = Math.min(...losses)
+    const range = maxLoss - minLoss || 1
+    const actualTotal = totalEpisodes || losses.length
+
+    // Calculate start episode (if showing last 200 of more episodes)
+    const startEpisode = actualTotal > losses.length ? actualTotal - losses.length + 1 : 1
+
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between text-xs text-gray-600">
+          <span>Episode {startEpisode}</span>
+          <span>Episode {actualTotal}</span>
+        </div>
+        <div className="h-24 bg-gray-50 rounded-lg p-2 flex items-end overflow-hidden" style={{ gap: '1px' }}>
+          {losses.map((loss, index) => {
+            // Calculate height as percentage, ensuring it stays within bounds
+            const height = range > 0 ? ((loss - minLoss) / range) * 100 : 0
+            // Cap height at 100% to prevent overflow, with minimum visible height
+            const clampedHeight = Math.min(Math.max(height, 0.5), 100)
+            const actualEpisode = startEpisode + index
+            return (
+              <div
+                key={index}
+                className="flex-1 bg-indigo-600 rounded-t-sm transition-all"
+                style={{ height: `${clampedHeight}%`, minWidth: '2px', maxHeight: '100%' }}
+                title={`Episode ${actualEpisode}: ${loss.toFixed(4)}`}
+              />
+            )
+          })}
+        </div>
+        <div className="flex justify-between text-xs text-gray-600">
+          <span>Min: {minLoss.toFixed(4)}</span>
+          <span>Max: {maxLoss.toFixed(4)}</span>
+        </div>
+        {actualTotal > losses.length && (
+          <p className="text-xs text-gray-500 italic text-center">
+            Showing last {losses.length} of {actualTotal} episodes
           </p>
         )}
       </div>
@@ -1046,16 +1096,6 @@ export default function MazeSolver() {
             <Card className="p-3 bg-white border-gray-300">
               <h2 className="text-sm font-semibold mb-2 text-black underline">Hyperparameters</h2>
               
-              {/* SARSA Under Development - Remove this block to enable UI */}
-              {algorithm === "sarsa" ? (
-                <div className="p-6 text-center">
-                  <div className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-4">
-                    <p className="text-2xl mb-2">🚧</p>
-                    <p className="text-sm font-semibold text-yellow-800 mb-1">SARSA Algorithm</p>
-                    <p className="text-xs text-yellow-700">Under Development</p>
-                  </div>
-                </div>
-              ) : (
               <div className="space-y-2">
                   <div>
                     <label className="text-xs text-gray-600 mb-1 block">
@@ -1209,15 +1249,13 @@ export default function MazeSolver() {
                   </div>
                 )}
               </div>
-              )}
-              {/* End SARSA block */}
             </Card>
 
             <Card className="p-4 bg-white border-gray-300">
               <div className="space-y-3">
                 <Button
                   onClick={startTraining}
-                  disabled={trainingStatus.status === "training" || algorithm === "sarsa"}
+                  disabled={trainingStatus.status === "training"}
                   className="w-full h-12 bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
                 >
                   {trainingStatus.status === "training" ? (
@@ -1346,19 +1384,6 @@ export default function MazeSolver() {
                 </div>
               )}
             </Card>
-
-            {trainingLogs.length > 0 && (
-              <Card className="p-3 bg-white border-gray-300">
-                <h2 className="text-sm font-semibold mb-2 text-black">Live Logs</h2>
-                <div className="bg-gray-900 rounded-lg p-2 h-40 overflow-y-auto font-mono text-xs">
-                  {trainingLogs.map((log, index) => (
-                    <div key={index} className="text-green-400 mb-1">
-                      {log}
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
           </div>
 
           <div className="space-y-3">
@@ -1490,147 +1515,166 @@ export default function MazeSolver() {
 
       {/* Detailed Metrics Modal */}
       <Dialog open={isMetricsModalOpen} onOpenChange={setIsMetricsModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto bg-white">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-gray-900">📊 Detailed Performance Report</DialogTitle>
-            <DialogDescription className="text-gray-600">
-              Comprehensive metrics and visualizations from training
-            </DialogDescription>
+        <DialogContent className="!max-w-[98vw] !w-[98vw] h-[95vh] !max-h-[95vh] overflow-y-auto bg-white p-4" style={{ width: '98vw', maxWidth: '98vw' }}>
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-xl font-bold text-gray-900">📊 Detailed Performance Report</DialogTitle>
           </DialogHeader>
 
           {detailedMetrics && detailedMetrics.detailed_metrics && (
-            <div className="space-y-6 mt-4">
+            <div className="space-y-3 mt-2">
               {/* Summary Cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-5 gap-4">
                 <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 border-blue-300">
                   <div className="text-sm text-blue-700 font-semibold mb-1">Success Rate</div>
-                  <div className="text-2xl font-bold text-blue-900">
+                  <div className="text-3xl font-bold text-blue-900">
                     {((detailedMetrics.success_rate || 0) * 100).toFixed(1)}%
                   </div>
                 </Card>
                 <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 border-green-300">
                   <div className="text-sm text-green-700 font-semibold mb-1">Avg Episode Length</div>
-                  <div className="text-2xl font-bold text-green-900">
+                  <div className="text-3xl font-bold text-green-900">
                     {detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}
                   </div>
+                  <div className="text-xs text-green-600">steps</div>
                 </Card>
                 <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 border-purple-300">
                   <div className="text-sm text-purple-700 font-semibold mb-1">Avg Return</div>
-                  <div className="text-2xl font-bold text-purple-900">
+                  <div className="text-3xl font-bold text-purple-900">
                     {detailedMetrics.detailed_metrics.avg_return.toFixed(2)}
                   </div>
                 </Card>
+                <Card className="p-4 bg-gradient-to-br from-red-50 to-red-100 border-red-300">
+                  <div className="text-sm text-red-700 font-semibold mb-1">Training Loss (MSE)</div>
+                  <div className="text-3xl font-bold text-red-900">
+                    {detailedMetrics.detailed_metrics.training_loss.toFixed(4)}
+                  </div>
+                  <div className="text-xs text-red-600">Final: {detailedMetrics.detailed_metrics.final_loss.toFixed(4)}</div>
+                </Card>
                 <Card className="p-4 bg-gradient-to-br from-orange-50 to-orange-100 border-orange-300">
                   <div className="text-sm text-orange-700 font-semibold mb-1">Training Time</div>
-                  <div className="text-2xl font-bold text-orange-900">
+                  <div className="text-3xl font-bold text-orange-900">
                     {detailedMetrics.detailed_metrics.training_duration.toFixed(1)}s
                   </div>
+                  <div className="text-xs text-orange-600">{detailedMetrics.detailed_metrics.episodes_per_sec.toFixed(0)} eps/sec</div>
                 </Card>
               </div>
 
-              {/* Reward Curve */}
-              {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
-                <Card className="p-6 bg-white border-gray-300">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-900 flex items-center gap-2">
-                    <TrendingUp className="h-5 w-5" />
-                    Training Progress - Reward Curve
-                  </h3>
-                  <SimpleRewardChart 
-                    rewards={trainingStatus.rewards} 
-                    totalEpisodes={trainingStatus.total_episodes}
-                  />
-                </Card>
-              )}
+              {/* Charts Row - Side by Side */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Reward Curve */}
+                {trainingStatus.rewards && trainingStatus.rewards.length > 0 && (
+                  <Card className="p-4 bg-white border-gray-300">
+                    <h3 className="text-base font-semibold mb-3 text-gray-900 flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      Training Progress - Reward Curve
+                    </h3>
+                    <SimpleRewardChart 
+                      rewards={trainingStatus.rewards} 
+                      totalEpisodes={trainingStatus.total_episodes}
+                    />
+                  </Card>
+                )}
+
+                {/* Training Loss Curve */}
+                {detailedMetrics.loss_history && detailedMetrics.loss_history.length > 0 && (
+                  <Card className="p-4 bg-white border-gray-300">
+                    <h3 className="text-base font-semibold mb-3 text-gray-900 flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5" />
+                      Training Loss Curve (MSE)
+                    </h3>
+                    <SimpleLossChart 
+                      losses={detailedMetrics.loss_history} 
+                      totalEpisodes={detailedMetrics.loss_history.length}
+                    />
+                    <div className="text-xs text-gray-500 mt-1">
+                      Lower loss = better value approximation
+                    </div>
+                  </Card>
+                )}
+              </div>
 
               {/* Quantitative Metrics */}
-              <Card className="p-6 bg-white border-gray-300">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">📈 Quantitative Metrics</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">Undiscounted Return</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_return.toFixed(2)}</div>
-                    <div className="text-xs text-gray-500 mt-1">Std: {detailedMetrics.detailed_metrics.std_return.toFixed(2)}</div>
+              <Card className="p-4 bg-white border-gray-300">
+                <h3 className="text-base font-semibold mb-3 text-gray-900">📈 Quantitative Metrics</h3>
+                <div className="grid grid-cols-5 gap-4 text-sm">
+                  <div className="p-2.5 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1 text-xs">Undiscounted Return</div>
+                    <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_return.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Std: {detailedMetrics.detailed_metrics.std_return.toFixed(2)}</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">Discounted Return</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_discounted_return.toFixed(2)}</div>
-                    <div className="text-xs text-gray-500 mt-1">With gamma decay applied</div>
+                  <div className="p-2.5 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1 text-xs">Discounted Return</div>
+                    <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_discounted_return.toFixed(2)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">With gamma decay</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">Avg Episode Length</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}</div>
-                    <div className="text-xs text-gray-500 mt-1">Min: {detailedMetrics.detailed_metrics.min_episode_length.toFixed(0)} steps</div>
+                  <div className="p-2.5 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1 text-xs">Avg Episode Length</div>
+                    <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">Min: {detailedMetrics.detailed_metrics.min_episode_length.toFixed(0)}</div>
                   </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">TD Error</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_td_error.toFixed(3)}</div>
-                    <div className="text-xs text-gray-500 mt-1">{detailedMetrics.detailed_metrics.avg_td_error === 0 ? 'N/A for Monte Carlo' : 'Prediction accuracy'}</div>
+                  <div className="p-2.5 bg-gray-50 rounded-lg">
+                    <div className="text-gray-600 font-medium mb-1 text-xs">TD Error</div>
+                    <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_td_error.toFixed(3)}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{detailedMetrics.detailed_metrics.avg_td_error === 0 ? 'N/A for MC' : 'Accuracy'}</div>
+                  </div>
+                  <div className="p-2.5 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-200">
+                    <div className="text-indigo-700 font-medium mb-1 text-xs">Training Loss (MSE)</div>
+                    <div className="text-lg font-bold text-indigo-900">{detailedMetrics.detailed_metrics.training_loss.toFixed(4)}</div>
+                    <div className="text-xs text-indigo-600 mt-0.5">Final: {detailedMetrics.detailed_metrics.final_loss.toFixed(4)}</div>
                   </div>
                 </div>
               </Card>
 
-              {/* Q-Value Statistics */}
-              <Card className="p-6 bg-white border-gray-300">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">🎯 Q-Value Statistics</h3>
-                <div className="grid grid-cols-4 gap-4 text-sm">
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-blue-700 font-medium mb-1">Mean</div>
-                    <div className="text-xl font-bold text-blue-900">{detailedMetrics.detailed_metrics.q_value_mean.toFixed(2)}</div>
+              {/* Bottom Row - Q-Values and Return Distribution Side by Side */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Q-Value Statistics */}
+                <Card className="p-4 bg-white border-gray-300">
+                  <h3 className="text-base font-semibold mb-3 text-gray-900">🎯 Q-Value Statistics</h3>
+                  <div className="grid grid-cols-4 gap-3 text-sm">
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <div className="text-blue-700 font-medium mb-1 text-sm">Mean</div>
+                      <div className="text-lg font-bold text-blue-900">{detailedMetrics.detailed_metrics.q_value_mean.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-green-50 rounded-lg">
+                      <div className="text-green-700 font-medium mb-1 text-sm">Max</div>
+                      <div className="text-lg font-bold text-green-900">{detailedMetrics.detailed_metrics.q_value_max.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-red-50 rounded-lg">
+                      <div className="text-red-700 font-medium mb-1 text-sm">Min</div>
+                      <div className="text-lg font-bold text-red-900">{detailedMetrics.detailed_metrics.q_value_min.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <div className="text-purple-700 font-medium mb-1 text-sm">Std Dev</div>
+                      <div className="text-lg font-bold text-purple-900">{detailedMetrics.detailed_metrics.q_value_std.toFixed(2)}</div>
+                    </div>
                   </div>
-                  <div className="p-3 bg-green-50 rounded-lg">
-                    <div className="text-green-700 font-medium mb-1">Max</div>
-                    <div className="text-xl font-bold text-green-900">{detailedMetrics.detailed_metrics.q_value_max.toFixed(2)}</div>
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                    <strong>Interpretation:</strong> Max Q-values should be near goal states, with values decreasing farther from goal
                   </div>
-                  <div className="p-3 bg-red-50 rounded-lg">
-                    <div className="text-red-700 font-medium mb-1">Min</div>
-                    <div className="text-xl font-bold text-red-900">{detailedMetrics.detailed_metrics.q_value_min.toFixed(2)}</div>
-                  </div>
-                  <div className="p-3 bg-purple-50 rounded-lg">
-                    <div className="text-purple-700 font-medium mb-1">Std Dev</div>
-                    <div className="text-xl font-bold text-purple-900">{detailedMetrics.detailed_metrics.q_value_std.toFixed(2)}</div>
-                  </div>
-                </div>
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
-                  <strong>Interpretation:</strong> Q-values represent the expected total reward. Max values should be near goal states, with values decreasing farther from the goal.
-                </div>
-              </Card>
+                </Card>
 
-              {/* Return Distribution */}
-              <Card className="p-6 bg-white border-gray-300">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">📊 Return Distribution (Percentiles)</h3>
-                <div className="grid grid-cols-3 gap-4 text-sm">
-                  <div className="p-3 bg-yellow-50 rounded-lg border-2 border-yellow-300">
-                    <div className="text-yellow-700 font-medium mb-1">25th Percentile</div>
-                    <div className="text-xl font-bold text-yellow-900">{detailedMetrics.detailed_metrics.return_p25.toFixed(2)}</div>
+                {/* Return Distribution */}
+                <Card className="p-4 bg-white border-gray-300">
+                  <h3 className="text-base font-semibold mb-3 text-gray-900">📊 Return Distribution (Percentiles)</h3>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div className="p-3 bg-yellow-50 rounded-lg border-2 border-yellow-300">
+                      <div className="text-yellow-700 font-medium mb-1 text-sm">25th Percentile</div>
+                      <div className="text-lg font-bold text-yellow-900">{detailedMetrics.detailed_metrics.return_p25.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-orange-50 rounded-lg border-2 border-orange-300">
+                      <div className="text-orange-700 font-medium mb-1 text-sm">50th (Median)</div>
+                      <div className="text-lg font-bold text-orange-900">{detailedMetrics.detailed_metrics.return_p50.toFixed(2)}</div>
+                    </div>
+                    <div className="p-3 bg-red-50 rounded-lg border-2 border-red-300">
+                      <div className="text-red-700 font-medium mb-1 text-sm">75th Percentile</div>
+                      <div className="text-lg font-bold text-red-900">{detailedMetrics.detailed_metrics.return_p75.toFixed(2)}</div>
+                    </div>
                   </div>
-                  <div className="p-3 bg-orange-50 rounded-lg border-2 border-orange-300">
-                    <div className="text-orange-700 font-medium mb-1">50th Percentile (Median)</div>
-                    <div className="text-xl font-bold text-orange-900">{detailedMetrics.detailed_metrics.return_p50.toFixed(2)}</div>
+                  <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
+                    <strong>Interpretation:</strong> Narrow range (p75 - p25) indicates consistent performance, wide range suggests high variance
                   </div>
-                  <div className="p-3 bg-red-50 rounded-lg border-2 border-red-300">
-                    <div className="text-red-700 font-medium mb-1">75th Percentile</div>
-                    <div className="text-xl font-bold text-red-900">{detailedMetrics.detailed_metrics.return_p75.toFixed(2)}</div>
-                  </div>
-                </div>
-                <div className="mt-4 p-3 bg-gray-50 rounded-lg text-xs text-gray-600">
-                  <strong>Interpretation:</strong> Narrow range (p75 - p25) indicates consistent performance. Wide range suggests high variance.
-                </div>
-              </Card>
-
-              {/* Training Efficiency */}
-              <Card className="p-6 bg-white border-gray-300">
-                <h3 className="text-lg font-semibold mb-4 text-gray-900">⚡ Training Efficiency</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">Total Training Time</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.training_duration.toFixed(2)} seconds</div>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <div className="text-gray-600 font-medium mb-1">Training Speed</div>
-                    <div className="text-xl font-bold text-gray-900">{detailedMetrics.detailed_metrics.episodes_per_sec.toFixed(1)} eps/sec</div>
-                  </div>
-                </div>
-              </Card>
+                </Card>
+              </div>
             </div>
           )}
         </DialogContent>

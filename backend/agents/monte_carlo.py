@@ -21,12 +21,14 @@ class MonteCarloAgent:
         self.episode_lengths = []
         self.episode_returns = []
         self.discounted_returns = []
+        self.training_losses = []  # Mean Squared Prediction Error per episode
         self.q_value_history = {
             'mean': [],
             'max': [],
             'min': [],
             'std': []
         }
+        self.loss_history = []  # Track loss over episodes
 
     def select_action(self, state, epsilon=None):
         if epsilon is None:
@@ -86,30 +88,42 @@ class MonteCarloAgent:
 
     def update_q_values(self, episode, returns):
         if self.method == 'first_visit':
-            self._first_visit_mc(episode, returns)
+            return self._first_visit_mc(episode, returns)
         else:
-            self._every_visit_mc(episode, returns)
+            return self._every_visit_mc(episode, returns)
 
     def _first_visit_mc(self, episode, returns):
         visited = set()
+        episode_squared_errors = []
         for t, (state, action, _) in enumerate(episode):
             state_action = (state, action)
             if state_action not in visited:
                 visited.add(state_action)
+                old_q = self.Q[state, action]
                 self.returns[state][action].append(returns[t])
                 self.visit_counts[state, action] += 1
                 self.Q[state, action] = np.mean(self.returns[state][action])
+                # Calculate squared error (loss) between old and new Q-value
+                prediction_error = returns[t] - old_q
+                episode_squared_errors.append(prediction_error ** 2)
+        return episode_squared_errors
 
     def _every_visit_mc(self, episode, returns):
+        episode_squared_errors = []
         for t, (state, action, _) in enumerate(episode):
+            old_q = self.Q[state, action]
             self.returns[state][action].append(returns[t])
             self.visit_counts[state, action] += 1
             self.Q[state, action] = np.mean(self.returns[state][action])
+            # Calculate squared error (loss) between old and new Q-value
+            prediction_error = returns[t] - old_q
+            episode_squared_errors.append(prediction_error ** 2)
+        return episode_squared_errors
 
     def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=True):
         episode, total_reward, success = self.generate_episode(env, max_steps, epsilon, exploring_start)
         returns = self.calculate_returns(episode)
-        self.update_q_values(episode, returns)
+        episode_squared_errors = self.update_q_values(episode, returns)
         
         # Track metrics
         episode_length = len(episode)
@@ -118,6 +132,12 @@ class MonteCarloAgent:
         self.episode_lengths.append(episode_length)
         self.episode_returns.append(total_reward)
         self.discounted_returns.append(discounted_return)
+        
+        # Calculate mean squared error (training loss) for this episode
+        episode_loss = float(np.mean(episode_squared_errors)) if len(episode_squared_errors) > 0 else 0.0
+        self.training_losses.append(episode_loss)
+        self.loss_history.append(episode_loss)
+        
         self._update_q_value_stats()
         
         self.episode_count += 1
@@ -144,6 +164,8 @@ class MonteCarloAgent:
             'avg_episode_length': float(np.mean(self.episode_lengths[-last_n:])),
             'min_episode_length': float(np.min(self.episode_lengths[-last_n:])),
             'avg_td_error': 0.0,  # Not applicable for Monte Carlo
+            'training_loss': float(np.mean(self.training_losses[-last_n:])) if len(self.training_losses) > 0 else 0.0,
+            'final_loss': self.training_losses[-1] if len(self.training_losses) > 0 else 0.0,
             'q_value_mean': self.q_value_history['mean'][-1] if self.q_value_history['mean'] else 0.0,
             'q_value_max': self.q_value_history['max'][-1] if self.q_value_history['max'] else 0.0,
             'q_value_min': self.q_value_history['min'][-1] if self.q_value_history['min'] else 0.0,
@@ -190,12 +212,14 @@ class MonteCarloAgent:
         self.episode_lengths = []
         self.episode_returns = []
         self.discounted_returns = []
+        self.training_losses = []
         self.q_value_history = {
             'mean': [],
             'max': [],
             'min': [],
             'std': []
         }
+        self.loss_history = []
 
 
 class MonteCarloESAgent(MonteCarloAgent):

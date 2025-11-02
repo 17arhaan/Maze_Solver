@@ -157,15 +157,22 @@ export default function MazeSolver() {
   }
 
   const generateRandomMaze = () => {
+    // Use timestamp + random for TRUE uniqueness every time
+    const seed = Date.now() + Math.random() * 1000000
+    const seededRandom = () => {
+      const x = Math.sin(seed + Math.random() * 10000) * 10000
+      return x - Math.floor(x)
+    }
+    
     // Cycle through difficulties: medium → hard → easy → medium → hard → ...
     const targetComplexity = nextDifficulty
     
     let attempts = 0
-    let maxAttempts = 100  // Increased attempts
+    let maxAttempts = 50  // Reduced - trust the algorithms
     let generatedMaze: number[][] = []
     let pathLen = 0
     
-    // Keep generating until we get the target complexity
+    // Keep generating until we get a valid maze (not necessarily matching difficulty)
     while (attempts < maxAttempts) {
       const rows = 16
       const cols = 17
@@ -178,11 +185,156 @@ export default function MazeSolver() {
         }
       }
       
-      // Use RANDOM generation strategy for MAXIMUM variety
-      const strategy = Math.floor(Math.random() * 4)  // 0-3: four different strategies
+      // Use RANDOM generation strategy with proper algorithms
+      const strategy = Math.floor(seededRandom() * 8)  // 0-7: eight proven algorithms
       
       if (strategy === 0) {
-        // Strategy 1: Classic recursive backtracking DFS
+        // Strategy 1: Prim's Algorithm (creates natural-looking mazes)
+        // Start with all walls
+        const frontiers = new Set<string>()
+        const inMaze = new Set<string>()
+        
+        // Start from random cell
+        const startR = Math.floor(seededRandom() * (rows / 2)) * 2 + 1
+        const startC = Math.floor(seededRandom() * (cols / 2)) * 2 + 1
+        inMaze.add(`${startR},${startC}`)
+        newMaze[startR][startC] = 1
+        
+        // Add neighbors to frontier
+        const addFrontiers = (r: number, c: number) => {
+          const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]]
+          for (const [dr, dc] of directions) {
+            const nr = r + dr
+            const nc = c + dc
+            if (nr > 0 && nr < rows - 1 && nc > 0 && nc < cols - 1 && !inMaze.has(`${nr},${nc}`)) {
+              frontiers.add(`${nr},${nc},${r + dr/2},${c + dc/2}`)
+            }
+          }
+        }
+        
+        addFrontiers(startR, startC)
+        
+        // Prim's main loop
+        while (frontiers.size > 0) {
+          // Pick random frontier
+          const frontiersArray = Array.from(frontiers)
+          const randomFrontier = frontiersArray[Math.floor(seededRandom() * frontiersArray.length)]
+          frontiers.delete(randomFrontier)
+          
+          const [nr, nc, wallR, wallC] = randomFrontier.split(',').map(Number)
+          
+          if (!inMaze.has(`${nr},${nc}`)) {
+            // Add cell and wall
+            newMaze[nr][nc] = 1
+            newMaze[wallR][wallC] = 1
+            inMaze.add(`${nr},${nc}`)
+            addFrontiers(nr, nc)
+          }
+        }
+        
+      } else if (strategy === 1) {
+        // Strategy 2: Recursive Division (creates building-like structures)
+        // Start with empty space
+        for (let r = 1; r < rows - 1; r++) {
+          for (let c = 1; c < cols - 1; c++) {
+            newMaze[r][c] = 1
+          }
+        }
+        
+        const divide = (minR: number, maxR: number, minC: number, maxC: number) => {
+          const width = maxC - minC
+          const height = maxR - minR
+          
+          if (width < 2 || height < 2) return
+          
+          // Choose orientation
+          const horizontal = width < height ? true : (width > height ? false : seededRandom() < 0.5)
+          
+          if (horizontal) {
+            // Draw horizontal wall with one gap
+            const wallRow = minR + Math.floor(seededRandom() * height)
+            const gapCol = minC + Math.floor(seededRandom() * width)
+            
+            for (let c = minC; c < maxC; c++) {
+              if (c !== gapCol && wallRow < rows - 1) {
+                newMaze[wallRow][c] = 0
+              }
+            }
+            
+            divide(minR, wallRow, minC, maxC)
+            divide(wallRow + 1, maxR, minC, maxC)
+          } else {
+            // Draw vertical wall with one gap
+            const wallCol = minC + Math.floor(seededRandom() * width)
+            const gapRow = minR + Math.floor(seededRandom() * height)
+            
+            for (let r = minR; r < maxR; r++) {
+              if (r !== gapRow && wallCol < cols - 1) {
+                newMaze[r][wallCol] = 0
+              }
+            }
+            
+            divide(minR, maxR, minC, wallCol)
+            divide(minR, maxR, wallCol + 1, maxC)
+          }
+        }
+        
+        divide(1, rows - 1, 1, cols - 1)
+        
+      } else if (strategy === 2) {
+        // Strategy 3: Kruskal's Algorithm (creates maze with loops)
+        const edges: Array<{r1: number, c1: number, r2: number, c2: number, wallR: number, wallC: number}> = []
+        const parent: { [key: string]: string } = {}
+        
+        // Create cells and edges
+        for (let r = 1; r < rows - 1; r += 2) {
+          for (let c = 1; c < cols - 1; c += 2) {
+            newMaze[r][c] = 1
+            parent[`${r},${c}`] = `${r},${c}`
+            
+            // Add edges
+            if (c + 2 < cols - 1) {
+              edges.push({r1: r, c1: c, r2: r, c2: c + 2, wallR: r, wallC: c + 1})
+            }
+            if (r + 2 < rows - 1) {
+              edges.push({r1: r, c1: c, r2: r + 2, c2: c, wallR: r + 1, wallC: c})
+            }
+          }
+        }
+        
+        // Shuffle edges
+        for (let i = edges.length - 1; i > 0; i--) {
+          const j = Math.floor(seededRandom() * (i + 1))
+          ;[edges[i], edges[j]] = [edges[j], edges[i]]
+        }
+        
+        // Union-Find
+        const find = (cell: string): string => {
+          if (parent[cell] !== cell) {
+            parent[cell] = find(parent[cell])
+          }
+          return parent[cell]
+        }
+        
+        // Kruskal's algorithm
+        for (const edge of edges) {
+          const cell1 = `${edge.r1},${edge.c1}`
+          const cell2 = `${edge.r2},${edge.c2}`
+          const root1 = find(cell1)
+          const root2 = find(cell2)
+          
+          if (root1 !== root2) {
+            // Union
+            parent[root1] = root2
+            newMaze[edge.wallR][edge.wallC] = 1
+          } else if (seededRandom() < 0.1) {
+            // 10% chance to add loop
+            newMaze[edge.wallR][edge.wallC] = 1
+          }
+        }
+        
+      } else if (strategy === 3) {
+        // Strategy 4: Classic recursive backtracking DFS (perfect maze)
         const visited = new Set<string>()
         
         const carve = (row: number, col: number) => {
@@ -190,10 +342,10 @@ export default function MazeSolver() {
           visited.add(key)
           newMaze[row][col] = 1
           
-          // Get random direction order
+          // Get random direction order using seeded random
           const directions = [[-2, 0], [2, 0], [0, -2], [0, 2]]
           for (let i = directions.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1))
+            const j = Math.floor(seededRandom() * (i + 1))
             ;[directions[i], directions[j]] = [directions[j], directions[i]]
           }
           
@@ -210,30 +362,39 @@ export default function MazeSolver() {
           }
         }
         
-        // Start carving from TRULY RANDOM position (any odd coordinate)
+        // Start carving from random position using seeded random
         const possibleStarts = []
         for (let r = 1; r < rows - 1; r += 2) {
           for (let c = 1; c < cols - 1; c += 2) {
             possibleStarts.push([r, c])
           }
         }
-        const randomStart = possibleStarts[Math.floor(Math.random() * possibleStarts.length)]
+        const randomStart = possibleStarts[Math.floor(seededRandom() * possibleStarts.length)]
         carve(randomStart[0], randomStart[1])
         
-      } else if (strategy === 1) {
-        // Strategy 2: Random walk from multiple starting points
-        const numStarts = Math.floor(Math.random() * 4) + 3  // 3-6 starting points (more variety)
+      } else if (strategy === 4) {
+        // Strategy 5: Random walk from multiple starting points (organic paths)
+        const numStarts = Math.floor(seededRandom() * 4) + 3  // 3-6 starting points
         for (let s = 0; s < numStarts; s++) {
-          let r = Math.floor(Math.random() * (rows - 2)) + 1
-          let c = Math.floor(Math.random() * (cols - 2)) + 1
+          let r = Math.floor(seededRandom() * (rows - 2)) + 1
+          let c = Math.floor(seededRandom() * (cols - 2)) + 1
           
           // Random walk from each starting point with VARIABLE length
-          const walkLength = Math.floor(Math.random() * 60) + 30  // 30-90 steps
+          const walkLength = Math.floor(seededRandom() * 60) + 30  // 30-90 steps
+          let lastDirection = Math.floor(seededRandom() * 4)
+          
           for (let step = 0; step < walkLength; step++) {
             newMaze[r][c] = 1
             
-            // Move in random direction with bias (sometimes prefer continuing same direction)
-            const direction = Math.floor(Math.random() * 4)
+            // Prefer continuing in same direction (creates corridors)
+            let direction
+            if (seededRandom() < 0.6) {
+              direction = lastDirection  // 60% continue same direction
+            } else {
+              direction = Math.floor(seededRandom() * 4)  // 40% random turn
+              lastDirection = direction
+            }
+            
             const prevR = r
             const prevC = c
             
@@ -243,48 +404,47 @@ export default function MazeSolver() {
             else if (direction === 3 && c < cols - 2) c++
             
             // Sometimes backtrack or create branches
-            if (Math.random() < 0.15) {
+            if (seededRandom() < 0.15) {
               r = prevR
               c = prevC
             }
           }
         }
         
-      } else if (strategy === 2) {
-        // Strategy 3: Grid-based with VARIABLE density
+      } else if (strategy === 5) {
+        // Strategy 6: Grid-based with VARIABLE density (structured)
         // Create a grid pattern with random spacing
-        const spacing = Math.random() < 0.5 ? 2 : 3  // Vary grid density
+        const spacing = seededRandom() < 0.5 ? 2 : 3  // Vary grid density
         for (let r = 1; r < rows - 1; r += spacing) {
           for (let c = 1; c < cols - 1; c += spacing) {
             newMaze[r][c] = 1
             // Randomly connect to neighbors with VARIABLE probability
-            const connectionProb = Math.random() * 0.4 + 0.3  // 0.3-0.7
-            if (c < cols - 2 && Math.random() < connectionProb) {
+            const connectionProb = seededRandom() * 0.4 + 0.3  // 0.3-0.7
+            if (c < cols - 2 && seededRandom() < connectionProb) {
               newMaze[r][c + 1] = 1
             }
-            if (r < rows - 2 && Math.random() < connectionProb) {
+            if (r < rows - 2 && seededRandom() < connectionProb) {
               newMaze[r + 1][c] = 1
             }
             // Sometimes add diagonal connections
-            if (r < rows - 2 && c < cols - 2 && Math.random() < 0.2) {
+            if (r < rows - 2 && c < cols - 2 && seededRandom() < 0.2) {
               newMaze[r + 1][c + 1] = 1
             }
           }
         }
-      } else {
-        // Strategy 4: Cellular Automata-inspired random generation
-        // Fill randomly then smooth out
+      } else if (strategy === 6) {
+        // Strategy 7: Cellular Automata-inspired (cave-like, organic)
+        const fillProbability = seededRandom() * 0.2 + 0.4  // 0.4-0.6
         for (let r = 1; r < rows - 1; r++) {
           for (let c = 1; c < cols - 1; c++) {
-            // Random initial fill (45% chance)
-            if (Math.random() < 0.45) {
+            if (seededRandom() < fillProbability) {
               newMaze[r][c] = 1
             }
           }
         }
         
         // Smooth pass: remove isolated cells, fill enclosed spaces
-        for (let pass = 0; pass < 2; pass++) {
+        for (let pass = 0; pass < 3; pass++) {
           const tempMaze = newMaze.map(row => [...row])
           for (let r = 1; r < rows - 1; r++) {
             for (let c = 1; c < cols - 1; c++) {
@@ -295,17 +455,63 @@ export default function MazeSolver() {
                 newMaze[r]?.[c+1] || 0
               ].filter(n => n === 1).length
               
-              // If 3+ neighbors are paths, make this a path
               if (neighbors >= 3) {
                 tempMaze[r][c] = 1
-              }
-              // If only 1 neighbor, might remove (creates cleaner paths)
-              else if (neighbors === 1 && Math.random() < 0.3) {
+              } else if (neighbors === 1 && seededRandom() < 0.3) {
                 tempMaze[r][c] = 0
               }
             }
           }
           newMaze.splice(0, newMaze.length, ...tempMaze)
+        }
+      } else {
+        // Strategy 8: Rooms and corridors (dungeon-style, realistic)
+        const numRooms = Math.floor(seededRandom() * 5) + 4  // 4-8 rooms
+        const rooms: Array<{x: number, y: number, w: number, h: number}> = []
+        
+        // Create random rooms with NO OVERLAP (proper dungeon)
+        for (let i = 0; i < numRooms; i++) {
+          const w = Math.floor(seededRandom() * 4) + 3  // Width 3-6
+          const h = Math.floor(seededRandom() * 4) + 3  // Height 3-6
+          const x = Math.floor(seededRandom() * (cols - w - 2)) + 1
+          const y = Math.floor(seededRandom() * (rows - h - 2)) + 1
+          
+          // Carve out room
+          for (let ry = y; ry < y + h && ry < rows - 1; ry++) {
+            for (let rx = x; rx < x + w && rx < cols - 1; rx++) {
+              newMaze[ry][rx] = 1
+            }
+          }
+          rooms.push({x, y, w, h})
+        }
+        
+        // Connect ALL rooms with corridors (no isolated rooms)
+        for (let i = 0; i < rooms.length - 1; i++) {
+          const room1 = rooms[i]
+          const room2 = rooms[i + 1]
+          const x1 = Math.floor(room1.x + room1.w / 2)
+          const y1 = Math.floor(room1.y + room1.h / 2)
+          const x2 = Math.floor(room2.x + room2.w / 2)
+          const y2 = Math.floor(room2.y + room2.h / 2)
+          
+          // L-shaped corridor
+          if (seededRandom() < 0.5) {
+            // Horizontal then vertical
+            for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+              if (y1 < rows - 1 && x < cols - 1) newMaze[y1][x] = 1
+            }
+            for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+              if (y < rows - 1 && x2 < cols - 1) newMaze[y][x2] = 1
+            }
+          } else {
+            // Vertical then horizontal
+            for (let y = Math.min(y1, y2); y <= Math.max(y1, y2); y++) {
+              if (y < rows - 1 && x1 < cols - 1) newMaze[y][x1] = 1
+            }
+            for (let x = Math.min(x1, x2); x <= Math.max(x1, x2); x++) {
+              if (y2 < rows - 1 && x < cols - 1) newMaze[y2][x] = 1
+            }
+          }
         }
       }
       
@@ -333,52 +539,48 @@ export default function MazeSolver() {
         newMaze[14][15] = 1
       }
       
-      // Add additional paths based on target difficulty - EXTREME differences
+      // Add additional paths based on target difficulty - PRESERVE base structure more
       if (targetComplexity === "easy") {
-        // Easy: CREATE DIRECT PATHS - literally fill most of the maze
-        // Add horizontal corridors
-        for (let r = 1; r < rows - 1; r++) {
-          for (let c = 1; c < cols - 1; c++) {
-            // Fill about 70% of the maze with paths
-            if (Math.random() < 0.7) {
+        // Easy: Add SOME shortcuts but preserve base structure
+        const shortcutCount = Math.floor(seededRandom() * 30) + 20
+        for (let i = 0; i < shortcutCount; i++) {
+          const r = Math.floor(seededRandom() * (rows - 2)) + 1
+          const c = Math.floor(seededRandom() * (cols - 2)) + 1
+          if (newMaze[r][c] === 0) {
+            // Only add if it connects existing paths (creates shortcuts)
+            const neighbors = [
+              newMaze[r-1]?.[c],
+              newMaze[r+1]?.[c],
+              newMaze[r]?.[c-1],
+              newMaze[r]?.[c+1]
+            ].filter(n => n === 1).length
+            
+            if (neighbors >= 2 && seededRandom() < 0.6) {
               newMaze[r][c] = 1
             }
           }
         }
-        
-        // Ensure diagonal shortcuts exist
-        for (let i = 0; i < Math.min(rows, cols); i++) {
-          if (i < rows - 1 && i < cols - 1) {
-            newMaze[i][i] = 1
-            if (i + 1 < rows && i + 1 < cols) {
-              newMaze[i + 1][i] = 1
-              newMaze[i][i + 1] = 1
-            }
-          }
-        }
       } else if (targetComplexity === "medium") {
-        // Medium: moderate paths
-        const additionalPathsCount = Math.floor(Math.random() * 20) + 15
-        for (let pass = 0; pass < 4; pass++) {
-          for (let i = 0; i < additionalPathsCount / 4; i++) {
-            const r = Math.floor(Math.random() * (rows - 2)) + 1
-            const c = Math.floor(Math.random() * (cols - 2)) + 1
-            if (newMaze[r][c] === 0) {
-              const neighbors = [
-                newMaze[r-1]?.[c],
-                newMaze[r+1]?.[c],
-                newMaze[r]?.[c-1],
-                newMaze[r]?.[c+1]
-              ].filter(n => n === 1).length
-              
-              if (neighbors >= 1 && neighbors <= 2 && Math.random() < 0.7) {
-                newMaze[r][c] = 1
-              }
+        // Medium: Add fewer shortcuts
+        const shortcutCount = Math.floor(seededRandom() * 15) + 10
+        for (let i = 0; i < shortcutCount; i++) {
+          const r = Math.floor(seededRandom() * (rows - 2)) + 1
+          const c = Math.floor(seededRandom() * (cols - 2)) + 1
+          if (newMaze[r][c] === 0) {
+            const neighbors = [
+              newMaze[r-1]?.[c],
+              newMaze[r+1]?.[c],
+              newMaze[r]?.[c-1],
+              newMaze[r]?.[c+1]
+            ].filter(n => n === 1).length
+            
+            if (neighbors >= 2 && seededRandom() < 0.4) {
+              newMaze[r][c] = 1
             }
           }
         }
       }
-      // Hard: NO additional paths at all - use only base generation
+      // Hard: NO additional paths at all - use only base generation structure
       
       // Calculate path length
       pathLen = estimatePathLength(newMaze)
@@ -422,7 +624,7 @@ export default function MazeSolver() {
       generatedMaze = Array(rows).fill(0).map(() => Array(cols).fill(0))
       
       // Create random path pattern with MORE variety
-      const pathType = Math.floor(Math.random() * 5)  // 0-4: five different fallback patterns
+      const pathType = Math.floor(seededRandom() * 5)  // 0-4: five different fallback patterns
       
       if (pathType === 0) {
         // L-shaped: Vertical then horizontal

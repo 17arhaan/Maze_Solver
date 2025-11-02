@@ -225,3 +225,4 @@ docs/.doctrees/
 # yarn.lock
 # pnpm-lock.yaml
 
+.env

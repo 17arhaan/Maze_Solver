@@ -16,6 +16,19 @@ class MonteCarloAgent:
         self.policy = np.zeros(n_states, dtype=int)
         self.episode_count = 0
         self.success_count = 0
+        
+        # Metrics tracking
+        self.episode_lengths = []
+        self.episode_returns = []
+        self.discounted_returns = []
+        self.training_losses = []  # Mean Squared Prediction Error per episode
+        self.q_value_history = {
+            'mean': [],
+            'max': [],
+            'min': [],
+            'std': []
+        }
+        self.loss_history = []  # Track loss over episodes
 
     def select_action(self, state, epsilon=None):
         if epsilon is None:
@@ -65,44 +78,138 @@ class MonteCarloAgent:
         return episode, total_reward, False
 
     def calculate_returns(self, episode):
+        """
+        Calculate returns G_t for each step in the episode.
+        Uses backward iteration: G ← γG + R_{t+1}
+        
+        Following Sutton & Barto's First-Visit MC algorithm:
+        Loop for each step of episode, t = T-1, T-2, ..., 0:
+            G ← γG + R_{t+1}
+        """
         G = 0
         returns = []
         for t in reversed(range(len(episode))):
             state, action, reward = episode[t]
-            G = reward + self.gamma * G
+            G = reward + self.gamma * G  # G ← γG + R_{t+1}
             returns.insert(0, G)
         return returns
 
     def update_q_values(self, episode, returns):
         if self.method == 'first_visit':
-            self._first_visit_mc(episode, returns)
+            return self._first_visit_mc(episode, returns)
         else:
-            self._every_visit_mc(episode, returns)
+            return self._every_visit_mc(episode, returns)
 
     def _first_visit_mc(self, episode, returns):
-        visited = set()
+        """
+        First-Visit Monte Carlo: Only update Q-value on FIRST occurrence of (s,a).
+        
+        Following Sutton & Barto's algorithm:
+        Unless S_t appears in S_0, S_1, ..., S_{t-1}:
+            Append G to Returns(S_t)
+            V(S_t) ← average(Returns(S_t))
+        
+        Adapted for Q-values: Tracks (state, action) pairs instead of just states.
+        """
+        visited = set()  # Track which (state, action) pairs we've already updated
+        episode_squared_errors = []
+        
         for t, (state, action, _) in enumerate(episode):
             state_action = (state, action)
+            # Only update if this is the FIRST time we see this (state, action) pair
             if state_action not in visited:
                 visited.add(state_action)
+                old_q = self.Q[state, action]
+                # Append G to Returns(S_t, A_t)
                 self.returns[state][action].append(returns[t])
                 self.visit_counts[state, action] += 1
+                # Q(S_t, A_t) ← average(Returns(S_t, A_t))
                 self.Q[state, action] = np.mean(self.returns[state][action])
+                # Calculate squared error (loss) between old and new Q-value
+                prediction_error = returns[t] - old_q
+                episode_squared_errors.append(prediction_error ** 2)
+        return episode_squared_errors
 
     def _every_visit_mc(self, episode, returns):
+        """
+        Every-Visit Monte Carlo: Update Q-value on EVERY occurrence of (s,a).
+        
+        Unlike First-Visit, this does NOT check if the state was visited before.
+        If State X appears twice in an episode, BOTH returns are recorded.
+        
+        Example from slides:
+        - State X appears at step 5 (return +45) and step 15 (return +20)
+        - First-Visit: Only records +45
+        - Every-Visit: Records both +45 and +20
+        """
+        episode_squared_errors = []
+        
         for t, (state, action, _) in enumerate(episode):
+            old_q = self.Q[state, action]
+            # Append G to Returns(S_t, A_t) - no "first visit" check
             self.returns[state][action].append(returns[t])
             self.visit_counts[state, action] += 1
+            # Q(S_t, A_t) ← average(Returns(S_t, A_t))
             self.Q[state, action] = np.mean(self.returns[state][action])
+            # Calculate squared error (loss) between old and new Q-value
+            prediction_error = returns[t] - old_q
+            episode_squared_errors.append(prediction_error ** 2)
+        return episode_squared_errors
 
     def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=True):
         episode, total_reward, success = self.generate_episode(env, max_steps, epsilon, exploring_start)
         returns = self.calculate_returns(episode)
-        self.update_q_values(episode, returns)
+        episode_squared_errors = self.update_q_values(episode, returns)
+        
+        # Track metrics
+        episode_length = len(episode)
+        discounted_return = returns[0] if len(returns) > 0 else 0
+        
+        self.episode_lengths.append(episode_length)
+        self.episode_returns.append(total_reward)
+        self.discounted_returns.append(discounted_return)
+        
+        # Calculate mean squared error (training loss) for this episode
+        episode_loss = float(np.mean(episode_squared_errors)) if len(episode_squared_errors) > 0 else 0.0
+        self.training_losses.append(episode_loss)
+        self.loss_history.append(episode_loss)
+        
+        self._update_q_value_stats()
+        
         self.episode_count += 1
         if success:
             self.success_count += 1
         return total_reward, success
+    
+    def _update_q_value_stats(self):
+        """Update Q-value statistics"""
+        self.q_value_history['mean'].append(float(np.mean(self.Q)))
+        self.q_value_history['max'].append(float(np.max(self.Q)))
+        self.q_value_history['min'].append(float(np.min(self.Q)))
+        self.q_value_history['std'].append(float(np.std(self.Q)))
+    
+    def get_metrics_summary(self, last_n=100):
+        """Get summary of tracked metrics"""
+        if len(self.episode_returns) == 0:
+            return {}
+        
+        return {
+            'avg_return': float(np.mean(self.episode_returns[-last_n:])),
+            'std_return': float(np.std(self.episode_returns[-last_n:])),
+            'avg_discounted_return': float(np.mean(self.discounted_returns[-last_n:])),
+            'avg_episode_length': float(np.mean(self.episode_lengths[-last_n:])),
+            'min_episode_length': float(np.min(self.episode_lengths[-last_n:])),
+            'avg_td_error': 0.0,  # Not applicable for Monte Carlo
+            'training_loss': float(np.mean(self.training_losses[-last_n:])) if len(self.training_losses) > 0 else 0.0,
+            'final_loss': self.training_losses[-1] if len(self.training_losses) > 0 else 0.0,
+            'q_value_mean': self.q_value_history['mean'][-1] if self.q_value_history['mean'] else 0.0,
+            'q_value_max': self.q_value_history['max'][-1] if self.q_value_history['max'] else 0.0,
+            'q_value_min': self.q_value_history['min'][-1] if self.q_value_history['min'] else 0.0,
+            'q_value_std': self.q_value_history['std'][-1] if self.q_value_history['std'] else 0.0,
+            'return_p25': float(np.percentile(self.episode_returns[-last_n:], 25)),
+            'return_p50': float(np.percentile(self.episode_returns[-last_n:], 50)),
+            'return_p75': float(np.percentile(self.episode_returns[-last_n:], 75)),
+        }
 
     def get_policy(self, env):
         policy = []
@@ -136,6 +243,19 @@ class MonteCarloAgent:
         self.policy = np.zeros(self.n_states, dtype=int)
         self.episode_count = 0
         self.success_count = 0
+        
+        # Reset metrics
+        self.episode_lengths = []
+        self.episode_returns = []
+        self.discounted_returns = []
+        self.training_losses = []
+        self.q_value_history = {
+            'mean': [],
+            'max': [],
+            'min': [],
+            'std': []
+        }
+        self.loss_history = []
 
 
 class MonteCarloESAgent(MonteCarloAgent):

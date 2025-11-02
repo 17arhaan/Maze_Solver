@@ -11,9 +11,9 @@
 **Maze Solver** is a reinforcement learning project that explores how an agent can learn to navigate a maze environment through trial-and-error.
 The maze is modeled as a **Markov Decision Process (MDP)**, and the project implements and compares three core reinforcement learning algorithms:
 
-* **Monte Carlo (MC)** – learning from complete episodes.
-* **SARSA** – on-policy Temporal Difference control.
 * **Q-Learning** – off-policy Temporal Difference control.
+* **SARSA** – on-policy Temporal Difference control.
+* **Monte Carlo (MC)** – learning from complete episodes.
 
 This progression illustrates how reinforcement learning evolves from **experience-based** to **bootstrapped** and **off-policy** learning.
 
@@ -140,22 +140,20 @@ Visualizations include:
 
 ```
 Maze_Solver/
-├── envs/
-│   ├── maze_env.py
-│   └── maps/
-├── agents/
-│   ├── monte_carlo.py
-│   ├── sarsa.py
-│   └── q_learning.py
-├── train/
-│   ├── train_mc.py
-│   ├── train_sarsa.py
-│   └── train_qlearning.py
-├── eval/
-│   ├── evaluate.py
-│   └── visualize_policy.py
-├── results/
-├── requirements.txt
+├── backend/
+│   ├── envs/
+│   │   └── maze_env.py
+│   ├── agents/
+│   │   ├── q_learning.py
+│   │   ├── sarsa.py
+│   │   └── monte_carlo.py
+│   ├── app.py
+│   └── requirements.txt
+├── frontend/
+│   ├── app/
+│   ├── components/
+│   └── package.json
+├── documentation/
 └── README.md
 ```
 
@@ -163,35 +161,32 @@ Maze_Solver/
 
 ## 🚀 Quick Start
 
+### Backend Setup
 ```bash
-git clone https://github.com/17arhaan/Maze_Solver.git
-cd Maze_Solver
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
+uvicorn app:app --reload
 ```
 
-### Train Monte Carlo Agent
-
+### Frontend Setup
 ```bash
-python train/train_mc.py --episodes 5000
+cd frontend
+pnpm install
+pnpm dev
 ```
 
-### Train SARSA Agent
+### Access the Application
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000/docs
 
-```bash
-python train/train_sarsa.py --episodes 5000 --epsilon 0.1
-```
-
-### Train Q-Learning Agent
-
-```bash
-python train/train_qlearning.py --episodes 5000
-```
-
-### Visualize Learned Policy
-
-```bash
-python eval/visualize_policy.py --model results/qlearning.pkl
-```
+### Train Agents via Web UI
+1. Select algorithm (Q-Learning, SARSA, or Monte Carlo)
+2. Configure hyperparameters (episodes, alpha, gamma, epsilon)
+3. Click "Start Training"
+4. View real-time training logs and policy visualization
+5. Simulate the learned policy
 
 ---
 

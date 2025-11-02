@@ -1,6 +1,6 @@
 import numpy as np
 
-class QLearningAgent:
+class SarsaAgent:
     def __init__(self, n_states, n_actions, alpha=0.3, gamma=0.99, epsilon=0.15):
         self.n_states = n_states
         self.n_actions = n_actions
@@ -31,27 +31,37 @@ class QLearningAgent:
         return int(np.argmax(self.Q[state]))
 
     def run_episode(self, env, max_steps=200, epsilon=None, exploring_start=False):
-        # exploring_start parameter ignored for Q-Learning (only used by Monte Carlo)
+        # exploring_start parameter ignored for SARSA (only used by Monte Carlo)
         state = env.reset()
+        action = self.select_action(state, epsilon)  # Select first action
         total_reward = 0
         discounted_return = 0
         episode_td_errors = []
         episode_squared_errors = []
         
         for step in range(max_steps):
-            action = self.select_action(state, epsilon)
+            # Take action and observe next state and reward
             next_state, reward, done = env.step(state, action)
-            best_next = np.max(self.Q[next_state])
-            td = reward + self.gamma * best_next - self.Q[state, action]
+            
+            # Select next action using current policy (on-policy)
+            next_action = self.select_action(next_state, epsilon)
+            
+            # SARSA update: uses Q(s', a') where a' is the actual next action
+            td = reward + self.gamma * self.Q[next_state, next_action] - self.Q[state, action]
             
             # Track TD error and squared error (loss)
             episode_td_errors.append(abs(td))
             episode_squared_errors.append(td ** 2)
             
+            # Update Q-value
             self.Q[state, action] += self.alpha * td
+            
             total_reward += reward
             discounted_return += (self.gamma ** step) * reward
+            
+            # Move to next state-action pair
             state = next_state
+            action = next_action
             
             if done:
                 # Record episode metrics
@@ -122,3 +132,4 @@ class QLearningAgent:
             else:
                 policy.append(int(np.argmax(self.Q[s])))
         return policy
+

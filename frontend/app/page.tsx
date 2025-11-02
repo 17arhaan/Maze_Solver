@@ -5,7 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Loader2, Play, RotateCcw, TrendingUp, Shuffle, BarChart3 } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Loader2, Play, RotateCcw, TrendingUp, Shuffle, BarChart3, Edit3, Save, Upload, Download, Grid3x3, Eye, EyeOff, Sparkles, X } from "lucide-react"
+import dynamic from 'next/dynamic'
+
+// Dynamic import for Plotly to avoid SSR issues
+const Plot = dynamic(() => import('react-plotly.js'), { ssr: false })
 
 type Algorithm = "q_learning" | "monte_carlo" | "sarsa"
 
@@ -99,10 +104,21 @@ export default function MazeSolver() {
   const [isMetricsModalOpen, setIsMetricsModalOpen] = useState(false)
   const [detailedMetrics, setDetailedMetrics] = useState<MetricsResponse | null>(null)
   const [loadingMetrics, setLoadingMetrics] = useState(false)
+  
+  // Editor Mode States
+  const [isEditorMode, setIsEditorMode] = useState(false)
+  const [editorTool, setEditorTool] = useState<'wall' | 'start' | 'goal' | 'path'>('wall')
+  const [savedMazes, setSavedMazes] = useState<{name: string, maze: number[][], complexity: string}[]>([])
+  
+  // Visualization States
+  const [showHeatmap, setShowHeatmap] = useState(false)
+  const [heatmapType, setHeatmapType] = useState<'q-value' | 'visits' | 'td-error'>('q-value')
+  const [is3DModalOpen, setIs3DModalOpen] = useState(false)
+  const [qTable, setQTable] = useState<number[][] | null>(null)
 
   useEffect(() => {
     const initialMaze = [
-      [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
       [0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0],
       [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0],
       [0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0],
@@ -117,26 +133,114 @@ export default function MazeSolver() {
       [0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0],
       [0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0],
       [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0],
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0],
     ]
 
     setMaze(initialMaze)
     setMazeComplexity("medium")
     setPathLength(estimatePathLength(initialMaze))
+    // Set optimal parameters for default algorithm and maze
+    setOptimalParameters("q_learning", "medium")
+    
+    // Load saved mazes from localStorage
+    const saved = localStorage.getItem('savedMazes')
+    if (saved) {
+      setSavedMazes(JSON.parse(saved))
+    }
   }, [])
 
+  // Set optimal parameters based on algorithm and maze complexity
+  const setOptimalParameters = (algo: Algorithm, complexity: "easy" | "medium" | "hard") => {
+    if (algo === "q_learning") {
+      // Q-Learning parameters
+      if (complexity === "easy") {
+        setEpisodes(500)
+        setAlpha(0.3)
+        setGamma(0.95)
+        setEpsilon(0.15)
+      } else if (complexity === "medium") {
+        setEpisodes(1000)
+        setAlpha(0.3)
+        setGamma(0.99)
+        setEpsilon(0.15)
+      } else {
+        // hard
+        setEpisodes(2000)
+        setAlpha(0.2)
+        setGamma(0.99)
+        setEpsilon(0.1)
+      }
+      setTrainingLogs(prev => [...prev, `✨ Q-Learning parameters optimized for ${complexity} maze`])
+    } else if (algo === "sarsa") {
+      // SARSA parameters (more conservative - on-policy learning)
+      if (complexity === "easy") {
+        setEpisodes(600)          // Slightly more episodes
+        setAlpha(0.25)            // Lower alpha for stability
+        setGamma(0.95)
+        setEpsilon(0.2)           // Higher epsilon (learns the exploratory policy)
+      } else if (complexity === "medium") {
+        setEpisodes(1200)         // More episodes than Q-Learning
+        setAlpha(0.25)            // More conservative learning rate
+        setGamma(0.99)
+        setEpsilon(0.18)          // Higher exploration
+      } else {
+        // hard
+        setEpisodes(2500)         // Significantly more episodes
+        setAlpha(0.15)            // Very conservative for stability
+        setGamma(0.99)
+        setEpsilon(0.15)          // Balanced exploration for hard mazes
+      }
+      setTrainingLogs(prev => [...prev, `✨ SARSA (on-policy) parameters optimized for ${complexity} maze`])
+    } else if (algo === "monte_carlo") {
+      // Monte Carlo needs MORE episodes
+      if (complexity === "easy") {
+        setEpisodes(2000)
+        setGamma(0.95)
+        setEpsilon(0.3)
+        setEpsilonDecay(0.9996)
+        setMinEpsilon(0.05)
+      } else if (complexity === "medium") {
+        setEpisodes(5000)
+        setGamma(0.99)
+        setEpsilon(0.3)
+        setEpsilonDecay(0.9996)
+        setMinEpsilon(0.05)
+      } else {
+        // hard
+        setEpisodes(8000)
+        setGamma(0.99)
+        setEpsilon(0.4)
+        setEpsilonDecay(0.9998)
+        setMinEpsilon(0.08)
+      }
+      setMcMethod("first_visit")
+      setTrainingLogs(prev => [...prev, `✨ Monte Carlo parameters optimized for ${complexity} maze`])
+    }
+  }
+
   const estimatePathLength = (mazeGrid: number[][]) => {
+    // Find start (value 2) and goal (value 3) dynamically
+    let startPos: [number, number] = [0, 1]
+    let goalPos: [number, number] = [15, 15]
+    
+    for (let r = 0; r < mazeGrid.length; r++) {
+      for (let c = 0; c < mazeGrid[r].length; c++) {
+        if (mazeGrid[r][c] === 2) startPos = [r, c]
+        if (mazeGrid[r][c] === 3) goalPos = [r, c]
+      }
+    }
+    
     // Simple BFS to find shortest path length
-    const queue: Array<[number, number, number]> = [[0, 1, 0]]
+    const queue: Array<[number, number, number]> = [[startPos[0], startPos[1], 0]]
     const visited = new Set<string>()
-    visited.add("0,1")
+    visited.add(`${startPos[0]},${startPos[1]}`)
     
     const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
     
     while (queue.length > 0) {
       const [row, col, dist] = queue.shift()!
       
-      if (row === 15 && col === 15) {
+      if (row === goalPos[0] && col === goalPos[1]) {
         return dist
       }
       
@@ -145,8 +249,9 @@ export default function MazeSolver() {
         const newCol = col + dc
         const key = `${newRow},${newCol}`
         
+        // Allow walking on paths (1), start (2), and goal (3) - not walls (0)
         if (newRow >= 0 && newRow < 16 && newCol >= 0 && newCol < 17 &&
-            !visited.has(key) && mazeGrid[newRow]?.[newCol] === 1) {
+            !visited.has(key) && mazeGrid[newRow]?.[newCol] !== 0) {
           visited.add(key)
           queue.push([newRow, newCol, dist + 1])
         }
@@ -516,8 +621,8 @@ export default function MazeSolver() {
       }
       
       // Ensure start and goal are accessible
-      newMaze[0][1] = 1
-      newMaze[15][15] = 1
+      newMaze[0][1] = 2  // Start position
+      newMaze[15][15] = 3  // Goal position
       
       // Connect start and goal to the main maze first
       // Connect start (0,1) downward
@@ -794,6 +899,9 @@ export default function MazeSolver() {
     setMazeComplexity(actualComplexity)
     setPathLength(pathLen)
     
+    // Auto-adjust parameters for current algorithm based on new maze complexity
+    setOptimalParameters(algorithm, actualComplexity)
+    
     // Cycle to next difficulty based on what was ACTUALLY generated (not target)
     if (actualComplexity === "easy") setNextDifficulty("medium")
     else if (actualComplexity === "medium") setNextDifficulty("hard")
@@ -927,6 +1035,11 @@ export default function MazeSolver() {
         }
         frontendStatus.policy = policy2D
         
+        // Store Q-table if available
+        if (data.q_table) {
+          setQTable(data.q_table)
+        }
+        
         // Add completion log
         const finalSuccessRate = data.success_rate !== null ? (data.success_rate * 100).toFixed(1) : '0.0'
         setTrainingLogs(prev => [...prev, `🎉 Training completed! Final success rate: ${finalSuccessRate}%`])
@@ -956,6 +1069,8 @@ export default function MazeSolver() {
       setFailureReason("")
       setTrainingLogs([])
       setDetailedMetrics(null)
+      setShowHeatmap(false)
+      setQTable(null)
     } catch (error) {
       console.error("Failed to reset:", error)
     }
@@ -1003,8 +1118,16 @@ export default function MazeSolver() {
     // Small delay to ensure state is cleared
     await new Promise(resolve => setTimeout(resolve, 100))
     
-    const start: [number, number] = [0, 1]
-    const goal: [number, number] = [15, 15]
+    // Find start (value 2) and goal (value 3) dynamically
+    let start: [number, number] = [0, 1]
+    let goal: [number, number] = [15, 15]
+    
+    for (let r = 0; r < maze.length; r++) {
+      for (let c = 0; c < maze[r].length; c++) {
+        if (maze[r][c] === 2) start = [r, c]
+        if (maze[r][c] === 3) goal = [r, c]
+      }
+    }
     
     let currentPos = start
     const path: [number, number][] = []
@@ -1157,6 +1280,170 @@ export default function MazeSolver() {
     return arrows[action] || ""
   }
 
+  // ========== MAZE EDITOR FUNCTIONS ==========
+  const handleCellClick = (row: number, col: number) => {
+    if (!isEditorMode || isAnimating || trainingStatus.status === "training") return
+    
+    const newMaze = maze.map(r => [...r])
+    
+    if (editorTool === 'wall') {
+      // Toggle wall (0) or path (1)
+      newMaze[row][col] = newMaze[row][col] === 0 ? 1 : 0
+    } else if (editorTool === 'start') {
+      // Set start position (value 2) - clear old start
+      newMaze.forEach((r, i) => r.forEach((c, j) => {
+        if (c === 2) newMaze[i][j] = 1
+      }))
+      newMaze[row][col] = 2
+    } else if (editorTool === 'goal') {
+      // Set goal position (value 3) - clear old goal
+      newMaze.forEach((r, i) => r.forEach((c, j) => {
+        if (c === 3) newMaze[i][j] = 1
+      }))
+      newMaze[row][col] = 3
+    } else if (editorTool === 'path') {
+      // Draw path
+      newMaze[row][col] = 1
+    }
+    
+    setMaze(newMaze)
+    setPathLength(estimatePathLength(newMaze))
+    // Reset training when maze is edited
+    setTrainingStatus({ status: "idle" })
+    setAgentPath([])
+    setAgentPosition(null)
+  }
+
+  const saveMaze = () => {
+    // Auto-generate name with timestamp
+    const timestamp = new Date().toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    })
+    const name = `Maze ${timestamp}`
+    
+    const newMazes = [...savedMazes, { name, maze: maze.map(r => [...r]), complexity: mazeComplexity }]
+    setSavedMazes(newMazes)
+    localStorage.setItem('savedMazes', JSON.stringify(newMazes))
+    setTrainingLogs(prev => [...prev, `💾 Maze saved as "${name}"`])
+    
+    // Auto-close editor mode after saving
+    setIsEditorMode(false)
+  }
+
+  const loadMaze = (mazeData: { name: string, maze: number[][], complexity: string }) => {
+    setMaze(mazeData.maze.map(r => [...r]))
+    setMazeComplexity(mazeData.complexity as "easy" | "medium" | "hard")
+    setPathLength(estimatePathLength(mazeData.maze))
+    setTrainingLogs(prev => [...prev, `📂 Loaded maze "${mazeData.name}"`])
+    setTrainingStatus({ status: "idle" })
+    setAgentPath([])
+    setAgentPosition(null)
+  }
+
+  const deleteSavedMaze = (index: number) => {
+    const newMazes = savedMazes.filter((_, i) => i !== index)
+    setSavedMazes(newMazes)
+    localStorage.setItem('savedMazes', JSON.stringify(newMazes))
+    setTrainingLogs(prev => [...prev, `🗑️ Maze deleted`])
+  }
+
+  const exportMaze = () => {
+    const dataStr = JSON.stringify({ maze, complexity: mazeComplexity }, null, 2)
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr)
+    const exportFileDefaultName = `maze_${mazeComplexity}_${Date.now()}.json`
+    
+    const linkElement = document.createElement('a')
+    linkElement.setAttribute('href', dataUri)
+    linkElement.setAttribute('download', exportFileDefaultName)
+    linkElement.click()
+    setTrainingLogs(prev => [...prev, `📥 Maze exported to ${exportFileDefaultName}`])
+  }
+
+  const importMaze = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = (e: any) => {
+      const file = e.target.files[0]
+      if (!file) return
+      
+      const reader = new FileReader()
+      reader.onload = (event: any) => {
+        try {
+          const data = JSON.parse(event.target.result)
+          if (data.maze && Array.isArray(data.maze)) {
+            setMaze(data.maze)
+            setMazeComplexity(data.complexity || "medium")
+            setPathLength(estimatePathLength(data.maze))
+            setTrainingLogs(prev => [...prev, `📤 Maze imported from ${file.name}`])
+            setTrainingStatus({ status: "idle" })
+            setAgentPath([])
+            setAgentPosition(null)
+          }
+        } catch (err) {
+          setTrainingLogs(prev => [...prev, `❌ Failed to import maze - invalid file`])
+        }
+      }
+      reader.readAsText(file)
+    }
+    input.click()
+  }
+
+  const clearMaze = () => {
+    const emptyMaze = Array(16).fill(null).map(() => Array(17).fill(1)) // Fill with paths (white)
+    
+    // Set black borders (walls)
+    for (let c = 0; c < 17; c++) {
+      emptyMaze[0][c] = 0 // Top border
+      emptyMaze[15][c] = 0 // Bottom border
+    }
+    for (let r = 0; r < 16; r++) {
+      emptyMaze[r][0] = 0 // Left border
+      emptyMaze[r][16] = 0 // Right border
+    }
+    
+    // Set start and goal inside the border
+    emptyMaze[0][1] = 2 // Start at top-left inside border
+    emptyMaze[15][15] = 3 // Goal at bottom-right inside border
+    
+    setMaze(emptyMaze)
+    setPathLength(estimatePathLength(emptyMaze))
+    setTrainingStatus({ status: "idle" })
+    setAgentPath([])
+    setAgentPosition(null)
+    setTrainingLogs(prev => [...prev, `🧹 Maze cleared - open space created`])
+  }
+
+  // ========== HEATMAP FUNCTIONS ==========
+  const getHeatmapValue = (row: number, col: number): number => {
+    if (!qTable || maze[row][col] === 0) return 0
+    
+    const stateIndex = row * 17 + col
+    if (stateIndex >= qTable.length) return 0
+    
+    // Get max Q-value for this state
+    const qValues = qTable[stateIndex]
+    return Math.max(...qValues)
+  }
+
+  const getHeatmapColor = (value: number, maxValue: number): string => {
+    if (maxValue === 0) return 'rgba(0, 0, 0, 0)'
+    
+    const normalized = Math.min(value / maxValue, 1)
+    
+    // Blue (low) -> Yellow (mid) -> Red (high)
+    if (normalized < 0.5) {
+      const t = normalized * 2
+      return `rgba(${Math.round(t * 255)}, ${Math.round(t * 255)}, 255, 0.6)`
+    } else {
+      const t = (normalized - 0.5) * 2
+      return `rgba(255, ${Math.round((1 - t) * 255)}, ${Math.round((1 - t) * 100)}, 0.6)`
+    }
+  }
+
   const getCellColor = (row: number, col: number) => {
     // FAILURE ANIMATIONS
     if (simulationFailed) {
@@ -1172,7 +1459,7 @@ export default function MazeSolver() {
       }
       
       // Goal becomes angry red when failed
-      if (row === 15 && col === 15) {
+      if (maze[row]?.[col] === 3) {
         return "bg-gradient-to-r from-red-500 via-orange-500 to-red-600 shadow-2xl shadow-red-500/50 animate-pulse"
       }
     }
@@ -1181,14 +1468,14 @@ export default function MazeSolver() {
     // Check if agent is currently on this cell
     if (agentPosition && agentPosition[0] === row && agentPosition[1] === col) {
       // Special celebration when goal is reached
-      if (goalReached && row === 15 && col === 15) {
+      if (goalReached && maze[row]?.[col] === 3) {
         return "bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 shadow-2xl shadow-green-500/50 animate-pulse scale-125"
       }
       return "bg-blue-500 shadow-lg shadow-blue-500/50 scale-110"
     }
     
-    // Check if this is the goal
-    if (row === 15 && col === 15) {
+    // Check if this is the goal (value 3)
+    if (maze[row]?.[col] === 3) {
       // Animate goal when reached
       if (goalReached) {
         return "bg-gradient-to-r from-yellow-400 via-red-500 to-pink-600 shadow-2xl shadow-yellow-500/50 animate-bounce"
@@ -1206,9 +1493,9 @@ export default function MazeSolver() {
       return "bg-yellow-300 shadow-md"
     }
     
-    // Check if this is the start (and agent hasn't started animating)
-    if (row === 0 && col === 1 && !agentPosition && !isAnimating) {
-      return "bg-blue-500 shadow-lg shadow-blue-500/50"
+    // Check if this is the start (value 2)
+    if (maze[row]?.[col] === 2 && !agentPosition && !isAnimating) {
+      return "bg-green-500 shadow-lg shadow-green-500/50"
     }
     
     // Wall
@@ -1320,32 +1607,34 @@ export default function MazeSolver() {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">
-          <div className="space-y-3">
-            <Card className="p-3 bg-gradient-to-br from-gray-50 to-gray-100 border-gray-300 shadow-md">
-              <h2 className="text-sm font-semibold mb-2 text-black underline">Readme</h2>
-              <p className="text-xs text-gray-700 leading-relaxed mb-[-2px] mt-[-15px] italic">
-                This project demonstrates Reinforcement Learning algorithms (Q-Learning, Monte Carlo, SARSA) solving a
-                16×17 maze. The agent learns to navigate from the start (blue) to the goal (red) by exploring the
-                environment and optimizing its policy through trial and error.
-              </p>
-              <div className="space-y-2 pt-2 border-t border-gray-300">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-blue-500 rounded shadow-md shadow-blue-500/50" />
-                  <span className="text-xs text-gray-700">Start Position</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-red-500 rounded shadow-md shadow-red-500/50" />
-                  <span className="text-xs text-gray-700">Goal Position</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-black rounded shadow-md" />
-                  <span className="text-xs text-gray-700">Wall</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 bg-yellow-200 rounded shadow-md" />
-                  <span className="text-xs text-gray-700">Agent Path</span>
-                </div>
-              </div>
+          {/* LEFT COLUMN - Live Training Logs and Controls (appears second on large screens) */}
+          <div className="space-y-3 order-1 lg:order-2">
+            <Card className="p-3 bg-white border-gray-300">
+              <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Live Training Logs
+              </h2>
+              {trainingLogs.length > 0 ? (
+                <>
+                  <div className="bg-gray-900 rounded-lg p-3 max-h-[300px] overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+                    {trainingLogs.slice(-15).map((log, index) => (
+                      <div key={index} className="whitespace-pre-wrap break-words">
+                        {log}
+                      </div>
+                    ))}
+                    {trainingStatus.status === "training" && (
+                      <div className="animate-pulse text-yellow-400">
+                        ⚡ Training in progress...
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500 text-center">
+                    Showing last 15 log entries • Complete metrics in Detailed Report
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-500 text-center py-4">No training logs yet. Start training to see logs.</p>
+              )}
             </Card>
 
             <Card className="p-3 bg-white border-gray-300">
@@ -1356,29 +1645,8 @@ export default function MazeSolver() {
                     key={algo}
                     onClick={() => {
                       setAlgorithm(algo)
-                      // Auto-set optimal parameters for each algorithm
-                      if (algo === "monte_carlo") {
-                        setEpisodes(5000)
-                        setGamma(0.99)
-                        setEpsilon(0.3)
-                        setEpsilonDecay(0.9996)
-                        setMinEpsilon(0.05)
-                        setMcMethod("first_visit")
-                        setTrainingLogs(prev => [...prev, `Optimal Monte Carlo parameters loaded: episodes=5000, γ=0.99, ε=0.3, decay=0.9996`])
-                      } else if (algo === "q_learning") {
-                        setEpisodes(1000)
-                        setAlpha(0.3)
-                        setGamma(0.99)
-                        setEpsilon(0.15)
-                        setTrainingLogs(prev => [...prev, `Optimal Q-Learning parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
-                      } else if (algo === "sarsa") {
-                        // SARSA optimal parameters (for when it's implemented)
-                        setEpisodes(1000)
-                        setAlpha(0.3)
-                        setGamma(0.99)
-                        setEpsilon(0.15)
-                        setTrainingLogs(prev => [...prev, `Optimal SARSA parameters loaded: episodes=1000, α=0.3, γ=0.99, ε=0.15`])
-                      }
+                      // Auto-set optimal parameters based on current maze complexity
+                      setOptimalParameters(algo, mazeComplexity)
                     }}
                     variant={algorithm === algo ? "default" : "outline"}
                     size="sm"
@@ -1425,106 +1693,165 @@ export default function MazeSolver() {
                     <p className="text-xs text-red-500 mt-1">Must be between 1 and 10000</p>
                   )}
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      Alpha (α)
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={alpha}
-                      onChange={(e) => {
-                        setAlpha(Number(e.target.value))
-                        if (validationErrors.alpha) {
-                          setValidationErrors(prev => ({ ...prev, alpha: false }))
-                        }
-                      }}
-                      className={`bg-white h-8 text-sm transition-colors ${
-                        validationErrors.alpha 
-                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                          : 'border-gray-300'
-                      }`}
-                      disabled={trainingStatus.status === "training"}
-                    />
-                    {validationErrors.alpha && (
-                      <p className="text-xs text-red-500 mt-1">0.01-1.0</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      Gamma (γ)
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={gamma}
-                      onChange={(e) => {
-                        setGamma(Number(e.target.value))
-                        if (validationErrors.gamma) {
-                          setValidationErrors(prev => ({ ...prev, gamma: false }))
-                        }
-                      }}
-                      className={`bg-white h-8 text-sm transition-colors ${
-                        validationErrors.gamma 
-                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                          : 'border-gray-300'
-                      }`}
-                      disabled={trainingStatus.status === "training"}
-                    />
-                    {validationErrors.gamma && (
-                      <p className="text-xs text-red-500 mt-1">0.5-1.0</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
-                      Epsilon (ε)
-                    </label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={epsilon}
-                      onChange={(e) => {
-                        setEpsilon(Number(e.target.value))
-                        if (validationErrors.epsilon) {
+                
+                {/* Alpha - ONLY for Q-Learning and SARSA */}
+                {(algorithm === "q_learning" || algorithm === "sarsa") && (
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Alpha (α) <span className="text-gray-400">- Learning Rate</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={alpha}
+                        onChange={(e) => {
+                          setAlpha(Number(e.target.value))
+                          if (validationErrors.alpha) {
+                            setValidationErrors(prev => ({ ...prev, alpha: false }))
+                          }
+                        }}
+                        className={`bg-white h-8 text-sm transition-colors ${
+                          validationErrors.alpha 
+                            ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300'
+                        }`}
+                        disabled={trainingStatus.status === "training"}
+                      />
+                      {validationErrors.alpha && (
+                        <p className="text-xs text-red-500 mt-1">0.01-1.0</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Gamma (γ) <span className="text-gray-400">- Discount</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={gamma}
+                        onChange={(e) => {
+                          setGamma(Number(e.target.value))
+                          if (validationErrors.gamma) {
+                            setValidationErrors(prev => ({ ...prev, gamma: false }))
+                          }
+                        }}
+                        className={`bg-white h-8 text-sm transition-colors ${
+                          validationErrors.gamma 
+                            ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300'
+                        }`}
+                        disabled={trainingStatus.status === "training"}
+                      />
+                      {validationErrors.gamma && (
+                        <p className="text-xs text-red-500 mt-1">0.5-1.0</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Epsilon (ε) <span className="text-gray-400">- Exploration</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={epsilon}
+                        onChange={(e) => {
+                          setEpsilon(Number(e.target.value))
+                          if (validationErrors.epsilon) {
                           setValidationErrors(prev => ({ ...prev, epsilon: false }))
                         }
-                      }}
-                      className={`bg-white h-8 text-sm transition-colors ${
-                        validationErrors.epsilon 
-                          ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                          : 'border-gray-300'
-                      }`}
-                      disabled={trainingStatus.status === "training"}
-                    />
-                    {validationErrors.epsilon && (
-                      <p className="text-xs text-red-500 mt-1">0.0-1.0</p>
-                    )}
+                          }}
+                          className={`bg-white h-8 text-sm transition-colors ${
+                            validationErrors.epsilon 
+                              ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                              : 'border-gray-300'
+                          }`}
+                          disabled={trainingStatus.status === "training"}
+                        />
+                        {validationErrors.epsilon && (
+                          <p className="text-xs text-red-500 mt-1">0.0-1.0</p>
+                        )}
+                      </div>
                   </div>
-                </div>
+                )}
+                
+                {/* Gamma and Epsilon - For Monte Carlo only (different layout) */}
+                {algorithm === "monte_carlo" && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Gamma (γ) <span className="text-gray-400">- Discount Factor</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={gamma}
+                        onChange={(e) => {
+                          setGamma(Number(e.target.value))
+                          if (validationErrors.gamma) {
+                            setValidationErrors(prev => ({ ...prev, gamma: false }))
+                          }
+                        }}
+                        className={`bg-white h-8 text-sm transition-colors ${
+                          validationErrors.gamma 
+                            ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300'
+                        }`}
+                        disabled={trainingStatus.status === "training"}
+                      />
+                      {validationErrors.gamma && (
+                        <p className="text-xs text-red-500 mt-1">0.5-1.0</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        Epsilon (ε) <span className="text-gray-400">- Initial Exploration</span>
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={epsilon}
+                        onChange={(e) => {
+                          setEpsilon(Number(e.target.value))
+                          if (validationErrors.epsilon) {
+                            setValidationErrors(prev => ({ ...prev, epsilon: false }))
+                          }
+                        }}
+                        className={`bg-white h-8 text-sm transition-colors ${
+                          validationErrors.epsilon 
+                            ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
+                            : 'border-gray-300'
+                        }`}
+                        disabled={trainingStatus.status === "training"}
+                      />
+                      {validationErrors.epsilon && (
+                        <p className="text-xs text-red-500 mt-1">0.0-1.0</p>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
                 {/* Monte Carlo specific parameters */}
-                {algorithm.startsWith("monte_carlo") && (
-                  <div className="border-t border-gray-200 pt-2 mt-2">
-                    <h3 className="text-xs font-semibold text-gray-700 mb-2">Monte Carlo Parameters</h3>
+                {algorithm === "monte_carlo" && (
+                  <div className="border-t pt-2 mt-2 border-gray-300 space-y-2">
+                    <div>
+                      <label className="text-xs text-gray-600 mb-1 block">
+                        MC Method <span className="text-gray-400">- Update Strategy</span>
+                      </label>
+                      <select
+                        value={mcMethod}
+                        onChange={(e) => setMcMethod(e.target.value as "first_visit" | "every_visit")}
+                        className="w-full h-8 text-sm border-gray-300 rounded-md bg-white"
+                        disabled={trainingStatus.status === "training"}
+                      >
+                        <option value="first_visit">First Visit (recommended)</option>
+                        <option value="every_visit">Every Visit</option>
+                      </select>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-xs text-gray-600 mb-1 block">
-                          Method
-                        </label>
-                        <select
-                          value={mcMethod}
-                          onChange={(e) => setMcMethod(e.target.value as "first_visit" | "every_visit")}
-                          className="w-full h-8 text-sm border border-gray-300 rounded bg-white px-2"
-                          disabled={trainingStatus.status === "training"}
-                        >
-                          <option value="first_visit">First-Visit</option>
-                          <option value="every_visit">Every-Visit</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-xs text-gray-600 mb-1 block">
-                          ε Decay
+                          ε Decay <span className="text-gray-400">- Per Episode</span>
                         </label>
                         <Input
                           type="number"
@@ -1535,97 +1862,28 @@ export default function MazeSolver() {
                           disabled={trainingStatus.status === "training"}
                         />
                       </div>
-                    </div>
-                    <div className="mt-2">
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        Min ε
-                      </label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={minEpsilon}
-                        onChange={(e) => setMinEpsilon(Number(e.target.value))}
-                        className="bg-white h-8 text-sm border-gray-300"
-                        disabled={trainingStatus.status === "training"}
-                      />
+                      <div>
+                        <label className="text-xs text-gray-600 mb-1 block">
+                          Min ε <span className="text-gray-400">- Lower Bound</span>
+                        </label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={minEpsilon}
+                          onChange={(e) => setMinEpsilon(Number(e.target.value))}
+                          className="bg-white h-8 text-sm border-gray-300"
+                          disabled={trainingStatus.status === "training"}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
             </Card>
 
-            <Card className="p-4 bg-white border-gray-300">
-              <div className="space-y-3">
-                <Button
-                  onClick={startTraining}
-                  disabled={trainingStatus.status === "training"}
-                  className="w-full h-12 bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
-                >
-                  {trainingStatus.status === "training" ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Training in Progress...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4 fill-white" />
-                      Start Training
-                    </>
-                  )}
-                </Button>
-              
-                {trainingStatus.policy && (
-                  <Button
-                    onClick={simulatePolicy}
-                    disabled={isAnimating}
-                    className="w-full h-12 bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-500 hover:to-green-600 shadow-md hover:shadow-lg transition-all duration-200 font-semibold text-sm"
-                  >
-                    {isAnimating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Simulating Path...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4 fill-white" />
-                        Simulate Learned Policy
-                      </>
-                    )}
-                  </Button>
-                )}
-                
-                <Button
-                  onClick={resetEnvironment}
-                  variant="outline"
-                  className="w-full h-10 border-2 border-gray-300 hover:bg-gray-50 hover:border-gray-400 text-gray-700 font-medium text-sm transition-all duration-200"
-                >
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  Reset Environment
-                </Button>
-
-                {trainingStatus.status === "completed" && jobId && (
-                  <Button
-                    onClick={fetchDetailedMetrics}
-                    disabled={loadingMetrics}
-                    className="w-full h-10 bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 text-white font-medium text-sm transition-all duration-200 shadow-md hover:shadow-lg"
-                  >
-                    {loadingMetrics ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Loading Metrics...
-                      </>
-                    ) : (
-                      <>
-                        <BarChart3 className="mr-2 h-4 w-4" />
-                        Detailed Report
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-
-              {trainingStatus.status !== "idle" && (
-                <div className="mt-3 p-4 bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-200 shadow-sm">
+            {trainingStatus.status !== "idle" && (
+              <Card className="p-4 bg-white border-gray-300">
+                <div className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-200 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-sm font-bold text-gray-800">Training Status</span>
                     <span
@@ -1685,11 +1943,12 @@ export default function MazeSolver() {
                     </p>
                   )}
                 </div>
-              )}
-            </Card>
+              </Card>
+            )}
           </div>
 
-          <div className="space-y-3">
+          {/* RIGHT COLUMN - Maze and Training Logs (appears first on large screens) */}
+          <div className="space-y-3 order-2 lg:order-1">
             <Card className="p-3 bg-white border-gray-300">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-semibold font-sans text-black leading-7 bg-gradient-to-br from-gray-50 to-gray-100 py-2 px-3 rounded-lg shadow-sm flex-1 text-center">
@@ -1719,7 +1978,207 @@ export default function MazeSolver() {
                 </div>
               )}
 
-              <div className="grid grid-cols-17 gap-1 bg-gradient-to-br from-gray-100 to-gray-200 p-3 rounded-xl shadow-inner">
+              {/* Editor Mode Controls */}
+              <div className="mb-3 space-y-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    onClick={() => {
+                      setIsEditorMode(!isEditorMode)
+                      if (!isEditorMode) {
+                        setTrainingLogs(prev => [...prev, `✏️ Editor mode activated`])
+                      }
+                    }}
+                    variant={isEditorMode ? "default" : "outline"}
+                    size="sm"
+                    className={isEditorMode ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    disabled={isAnimating || trainingStatus.status === "training"}
+                  >
+                    <Edit3 className="h-3 w-3 mr-1" />
+                    {isEditorMode ? 'Editing' : 'Edit Mode'}
+                  </Button>
+                  
+                  {trainingStatus.status === "completed" && qTable && (
+                    <>
+                      <Button
+                        onClick={() => setShowHeatmap(!showHeatmap)}
+                        variant={showHeatmap ? "default" : "outline"}
+                        size="sm"
+                        className={showHeatmap ? "bg-purple-600 hover:bg-purple-700" : ""}
+                      >
+                        {showHeatmap ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
+                        Q-Heatmap
+                      </Button>
+                      <Button
+                        onClick={() => setIs3DModalOpen(true)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Grid3x3 className="h-3 w-3 mr-1" />
+                        3D View
+                      </Button>
+                    </>
+                  )}
+
+                  {/* Action Buttons with Tooltips */}
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={startTraining}
+                          disabled={trainingStatus.status === "training"}
+                          size="sm"
+                          className="bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900"
+                        >
+                          {trainingStatus.status === "training" ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Play className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Start Training</p>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    {trainingStatus.policy && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={simulatePolicy}
+                            disabled={isAnimating}
+                            size="sm"
+                            className="bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-500 hover:to-green-600"
+                          >
+                            {isAnimating ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Play className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Simulate Learned Policy</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={resetEnvironment}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Reset Environment</p>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    {trainingStatus.status === "completed" && jobId && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            onClick={fetchDetailedMetrics}
+                            disabled={loadingMetrics}
+                            size="sm"
+                            className="bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 text-white"
+                          >
+                            {loadingMetrics ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <BarChart3 className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>Detailed Report</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </TooltipProvider>
+                </div>
+
+                {/* Editor Tools */}
+                {isEditorMode && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 space-y-2">
+                    <div className="flex gap-1 flex-wrap">
+                      <Button
+                        onClick={() => setEditorTool('wall')}
+                        variant={editorTool === 'wall' ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                      >
+                        🧱 Wall/Path
+                      </Button>
+                      <Button
+                        onClick={() => setEditorTool('start')}
+                        variant={editorTool === 'start' ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                      >
+                        🟢 Start
+                      </Button>
+                      <Button
+                        onClick={() => setEditorTool('goal')}
+                        variant={editorTool === 'goal' ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                      >
+                        🎯 Goal
+                      </Button>
+                      <Button
+                        onClick={() => setEditorTool('path')}
+                        variant={editorTool === 'path' ? "default" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                      >
+                        ✏️ Path
+                      </Button>
+                    </div>
+                    <div className="flex gap-1 flex-wrap">
+                      <Button onClick={saveMaze} variant="outline" size="sm" className="h-7 text-xs">
+                        <Save className="h-3 w-3 mr-1" />
+                        Save
+                      </Button>
+                      <Button onClick={exportMaze} variant="outline" size="sm" className="h-7 text-xs">
+                        <Download className="h-3 w-3 mr-1" />
+                        Export
+                      </Button>
+                      <Button onClick={importMaze} variant="outline" size="sm" className="h-7 text-xs">
+                        <Upload className="h-3 w-3 mr-1" />
+                        Import
+                      </Button>
+                      <Button onClick={clearMaze} variant="outline" size="sm" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50">
+                        <X className="h-3 w-3 mr-1" />
+                        Clear
+                      </Button>
+                    </div>
+                    {savedMazes.length > 0 && (
+                      <div className="max-h-20 overflow-y-auto">
+                        <div className="text-xs font-semibold mb-1">Saved Mazes:</div>
+                        <div className="space-y-1">
+                          {savedMazes.map((m, i) => (
+                            <div key={i} className="flex justify-between items-center bg-white p-1 rounded text-xs">
+                              <button onClick={() => loadMaze(m)} className="text-blue-600 hover:underline flex-1 text-left">
+                                {m.name} ({m.complexity})
+                              </button>
+                              <button onClick={() => deleteSavedMaze(i)} className="text-red-600 hover:text-red-800 ml-2">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-17 gap-1 bg-gradient-to-br from-gray-100 to-gray-200 p-3 rounded-xl shadow-inner relative">
                 {maze.map((row, rowIndex) =>
                   row.map((_, colIndex) => {
                     const cellColor = getCellColor(rowIndex, colIndex)
@@ -1728,15 +2187,34 @@ export default function MazeSolver() {
                       trainingStatus.policy[rowIndex][colIndex] !== null &&
                       maze[rowIndex][colIndex] === 1
                     
+                    // Calculate heatmap overlay
+                    const heatmapValue = showHeatmap ? getHeatmapValue(rowIndex, colIndex) : 0
+                    const maxHeatmapValue = showHeatmap && qTable ? Math.max(...qTable.flat().flat()) : 1
+                    const heatmapColor = showHeatmap && heatmapValue > 0 ? getHeatmapColor(heatmapValue, maxHeatmapValue) : ''
+                    
+                    // Use heatmap color if showing heatmap, otherwise use normal cell color
+                    const displayClassName = showHeatmap && heatmapColor ? '' : cellColor
+                    const displayStyle = showHeatmap && heatmapColor ? { backgroundColor: heatmapColor } : {}
+                    
                     return (
                       <div
                         key={`${rowIndex}-${colIndex}`}
-                        className={`aspect-square ${cellColor} rounded flex items-center justify-center text-xs font-bold transition-all duration-200 ease-in-out`}
+                        onClick={() => handleCellClick(rowIndex, colIndex)}
+                        className={`aspect-square ${displayClassName} rounded flex items-center justify-center text-xs font-bold transition-all duration-200 ease-in-out relative ${
+                          isEditorMode ? 'cursor-pointer hover:ring-2 hover:ring-blue-400' : ''
+                        } ${maze[rowIndex][colIndex] === 0 && showHeatmap ? 'bg-black' : ''}`}
+                        style={displayStyle}
                       >
-                        {/* Show arrows only when not animating */}
-                        {showArrow && trainingStatus.policy && (
+                        {/* Show arrows only when not animating and not in heatmap mode */}
+                        {showArrow && trainingStatus.policy && !showHeatmap && (
                           <span className="text-black drop-shadow-sm opacity-30">
                             {getArrowForAction(trainingStatus.policy[rowIndex][colIndex])}
+                          </span>
+                        )}
+                        {/* Show heatmap values */}
+                        {showHeatmap && heatmapValue > 0 && (
+                          <span className="text-white text-[8px] font-bold drop-shadow-lg">
+                            {heatmapValue.toFixed(1)}
                           </span>
                         )}
                       </div>
@@ -1745,73 +2223,6 @@ export default function MazeSolver() {
                 )}
               </div>
             </Card>
-
-            {trainingStatus.policy && (
-              <Card className={`p-3 border-gray-300 transition-all duration-500 ${
-                goalReached ? 'bg-gradient-to-r from-green-50 to-blue-50 border-green-300 shadow-lg' : 
-                simulationFailed ? 'bg-gradient-to-r from-red-50 to-orange-50 border-red-300 shadow-lg' :
-                'bg-white'
-              }`}>
-                <h2 className={`text-sm font-semibold mb-1 ${
-                  goalReached ? 'text-green-600 animate-pulse' : 
-                  simulationFailed ? 'text-red-600 animate-pulse' :
-                  'text-black'
-                }`}>
-                  {goalReached ? '🎉 Goal Reached! 🎉' : 
-                   simulationFailed ? '❌ Simulation Failed' :
-                   'Learned Policy'}
-                </h2>
-                <p className="text-xs text-gray-600">
-                  {goalReached
-                    ? "Amazing! The agent successfully navigated to the goal!"
-                    : simulationFailed
-                    ? "The agent got stuck and couldn't reach the goal."
-                    : isAnimating 
-                    ? "Watch the agent (blue) navigate through the maze, leaving trails behind!"
-                    : "Click 'Simulate Policy' to see the agent navigate from start to goal using the learned policy."}
-                </p>
-                {simulationFailed && failureReason && (
-                  <p className="text-xs text-orange-700 mt-2 italic bg-orange-50 p-2 rounded border border-orange-200">
-                    💡 {failureReason}
-                  </p>
-                )}
-                {agentPath.length > 0 && !isAnimating && (
-                  <p className={`text-xs mt-1 font-semibold ${
-                    goalReached ? 'text-green-600 text-base' : 
-                    simulationFailed ? 'text-red-600' :
-                    'text-green-600'
-                  }`}>
-                    {goalReached ? '✨ ' : simulationFailed ? '⚠️ ' : ''}
-                    {simulationFailed ? 'Failed after' : 'Path completed in'} {agentPath.length} steps
-                    {goalReached ? ' ✨' : simulationFailed ? ' - retrain recommended' : ''}
-                  </p>
-                )}
-              </Card>
-            )}
-
-            {trainingLogs.length > 0 && (
-              <Card className="p-3 bg-white border-gray-300">
-                <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4" />
-                  Live Training Logs
-                </h2>
-                <div className="bg-gray-900 rounded-lg p-3 max-h-[300px] overflow-y-auto font-mono text-xs text-green-400 space-y-1">
-                  {trainingLogs.slice(-15).map((log, index) => (
-                    <div key={index} className="whitespace-pre-wrap break-words">
-                      {log}
-                    </div>
-                  ))}
-                  {trainingStatus.status === "training" && (
-                    <div className="animate-pulse text-yellow-400">
-                      ⚡ Training in progress...
-                    </div>
-                  )}
-                </div>
-                <div className="mt-2 text-xs text-gray-500 text-center">
-                  Showing last 15 log entries • Complete metrics in Detailed Report
-                </div>
-              </Card>
-            )}
           </div>
         </div>
       </div>
@@ -1978,6 +2389,80 @@ export default function MazeSolver() {
                   </div>
                 </Card>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 3D Q-Value Surface Plot Modal */}
+      <Dialog open={is3DModalOpen} onOpenChange={setIs3DModalOpen}>
+        <DialogContent className="!max-w-[95vw] !w-[95vw] h-[90vh] !max-h-[90vh] overflow-hidden bg-white p-4">
+          <DialogHeader className="pb-2">
+            <DialogTitle className="text-xl font-bold text-gray-900">
+              <Sparkles className="inline h-5 w-5 mr-2" />
+              3D Q-Value Surface Visualization
+            </DialogTitle>
+            <DialogDescription>
+              Interactive 3D surface plot showing Q-values across the maze state space
+            </DialogDescription>
+          </DialogHeader>
+
+          {qTable && (
+            <div className="h-full w-full">
+              <Plot
+                data={[
+                  {
+                    type: 'surface',
+                    z: Array.from({ length: 16 }, (_, row) =>
+                      Array.from({ length: 17 }, (_, col) => {
+                        const stateIndex = row * 17 + col
+                        if (maze[row][col] === 0) return null // Wall
+                        const qValues = qTable[stateIndex]
+                        return Math.max(...qValues)
+                      })
+                    ),
+                    colorscale: [
+                      ['0.0', 'rgb(0,0,255)'],
+                      ['0.25', 'rgb(0,255,255)'],
+                      ['0.5', 'rgb(0,255,0)'],
+                      ['0.75', 'rgb(255,255,0)'],
+                      ['1.0', 'rgb(255,0,0)']
+                    ],
+                    showscale: true,
+                    colorbar: {
+                      title: 'Max Q-Value',
+                      titleside: 'right',
+                      titlefont: { size: 14 }
+                    },
+                    hovertemplate: 'Row: %{y}<br>Col: %{x}<br>Max Q: %{z:.2f}<extra></extra>',
+                  }
+                ]}
+                layout={{
+                  autosize: true,
+                  title: {
+                    text: `Max Q-Values - ${algorithm.toUpperCase()}`,
+                    font: { size: 18, family: 'Arial, sans-serif' }
+                  },
+                  scene: {
+                    xaxis: { title: 'Column', gridcolor: '#ddd' },
+                    yaxis: { title: 'Row', gridcolor: '#ddd' },
+                    zaxis: { title: 'Max Q-Value', gridcolor: '#ddd' },
+                    camera: {
+                      eye: { x: 1.5, y: 1.5, z: 1.3 }
+                    }
+                  },
+                  margin: { l: 0, r: 0, t: 40, b: 0 },
+                  paper_bgcolor: 'white',
+                  plot_bgcolor: 'white',
+                }}
+                config={{
+                  displayModeBar: true,
+                  displaylogo: false,
+                  modeBarButtonsToRemove: ['toImage'],
+                  responsive: true
+                }}
+                style={{ width: '100%', height: 'calc(90vh - 120px)' }}
+              />
             </div>
           )}
         </DialogContent>

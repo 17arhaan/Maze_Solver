@@ -1579,7 +1579,7 @@ export default function MazeSolver() {
           <span>Max: {maxReward.toFixed(2)}</span>
         </div>
         {actualTotal > rewards.length && (
-          <p className="text-xs text-gray-500 italic text-center">
+          <p className="text-xs text-slate-600 italic text-center">
             Showing last {rewards.length} of {actualTotal} episodes
           </p>
         )}
@@ -1626,7 +1626,7 @@ export default function MazeSolver() {
           <span>Max: {maxLoss.toFixed(4)}</span>
         </div>
         {actualTotal > losses.length && (
-          <p className="text-xs text-gray-500 italic text-center">
+          <p className="text-xs text-slate-600 italic text-center">
             Showing last {losses.length} of {actualTotal} episodes
           </p>
         )}
@@ -1635,26 +1635,26 @@ export default function MazeSolver() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-300 text-black p-5 overscroll-none">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 text-slate-900 p-5 overscroll-none">
       <div className="max-w-7xl mx-auto space-y-3 overscroll-none">
         <div className="text-center space-y-1">
-          <h1 className="font-bold text-black text-xl underline font-sans tracking-widest leading-9">
-            RL MAZE SOLVER{" "}
+          <h1 className="font-bold text-black text-2xl font-sans tracking-wider leading-10">
+            RL MAZE SOLVER
           </h1>
-          <p className="text-xs text-gray-600 italic">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p>
+          <p className="text-xs text-slate-600 italic font-medium">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">
           {/* LEFT COLUMN - Live Training Logs and Controls (appears second on large screens) */}
           <div className="space-y-3 order-1 lg:order-2">
-            <Card className="p-3 bg-white border-gray-300">
-              <h2 className="text-sm font-semibold mb-2 text-black flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
+            <Card className="p-3 bg-white/80 backdrop-blur-sm border-slate-200 shadow-lg shadow-blue-100/50">
+              <h2 className="text-sm font-semibold mb-2 text-slate-800 flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
                 Live Training Logs
               </h2>
               {trainingLogs.length > 0 ? (
                 <>
-                  <div className="bg-gray-900 rounded-lg p-3 max-h-[300px] overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+                  <div className="bg-gradient-to-br from-slate-900 to-slate-800 rounded-lg p-3 max-h-[300px] overflow-y-auto font-mono text-xs text-emerald-400 space-y-1 shadow-inner">
                     {trainingLogs.slice(-15).map((log, index) => (
                       <div key={index} className="whitespace-pre-wrap break-words">
                         {log}
@@ -1666,17 +1666,17 @@ export default function MazeSolver() {
                       </div>
                     )}
                   </div>
-                  <div className="mt-2 text-xs text-gray-500 text-center">
+                  <div className="mt-2 text-xs text-slate-600 text-center">
                     Showing last 15 log entries • Complete metrics in Detailed Report
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-gray-500 text-center py-4">No training logs yet. Start training to see logs.</p>
+                <p className="text-xs text-slate-600 text-center py-4">No training logs yet. Start training to see logs.</p>
               )}
             </Card>
 
-            <Card className="p-3 bg-white border-gray-300">
-              <h2 className="text-sm font-semibold mb-2 text-black underline">Algorithm Selection</h2>
+            <Card className="p-3 bg-white/80 backdrop-blur-sm border-slate-200 shadow-lg shadow-blue-100/50">
+              <h2 className="text-sm font-semibold mb-2 text-slate-800 border-b border-slate-200 pb-2">Algorithm Selection</h2>
               <div className="grid grid-cols-3 gap-2">
                 {(["q_learning", "monte_carlo", "sarsa"] as Algorithm[]).map((algo) => (
                   <Button
@@ -1690,8 +1690,8 @@ export default function MazeSolver() {
                     size="sm"
                     className={
                       algorithm === algo
-                        ? "bg-black text-white hover:bg-gray-800 text-xs"
-                        : "border-gray-300 hover:bg-gray-100 text-black text-xs"
+                        ? "bg-black/90 backdrop-blur-md text-white hover:bg-black text-xs shadow-lg border border-black/50"
+                        : "bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700 text-xs shadow-sm"
                     }
                   >
                     {algo === "q_learning" ? "Q-Learning" : 
@@ -1702,12 +1702,12 @@ export default function MazeSolver() {
               </div>
             </Card>
 
-            <Card className="p-3 bg-white border-gray-300">
-              <h2 className="text-sm font-semibold mb-2 text-black underline">Hyperparameters</h2>
+            <Card className="p-3 bg-white/80 backdrop-blur-sm border-slate-200 shadow-lg shadow-blue-100/50">
+              <h2 className="text-sm font-semibold mb-2 text-slate-800 border-b border-slate-200 pb-2">Hyperparameters</h2>
               
               <div className="space-y-2">
                   <div>
-                    <label className="text-xs text-gray-600 mb-1 block">
+                    <label className="text-xs text-slate-700 font-medium mb-1 block">
                       Episodes
                     </label>
                   <Input
@@ -1723,7 +1723,7 @@ export default function MazeSolver() {
                     className={`bg-white h-8 text-sm transition-colors ${
                       validationErrors.episodes 
                         ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                        : 'border-gray-300'
+                        : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                     }`}
                     disabled={trainingStatus.status === "training"}
                   />
@@ -1736,8 +1736,8 @@ export default function MazeSolver() {
                 {(algorithm === "q_learning" || algorithm === "sarsa") && (
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
-                        Alpha (α) <span className="text-gray-400">- Learning Rate</span>
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
+                        Alpha (α) <span className="text-slate-400">- Learning Rate</span>
                       </label>
                       <Input
                         type="number"
@@ -1752,7 +1752,7 @@ export default function MazeSolver() {
                         className={`bg-white h-8 text-sm transition-colors ${
                           validationErrors.alpha 
                             ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300'
+                            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                         }`}
                         disabled={trainingStatus.status === "training"}
                       />
@@ -1761,7 +1761,7 @@ export default function MazeSolver() {
                       )}
                     </div>
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
                         Gamma (γ) <span className="text-gray-400">- Discount</span>
                       </label>
                       <Input
@@ -1777,7 +1777,7 @@ export default function MazeSolver() {
                         className={`bg-white h-8 text-sm transition-colors ${
                           validationErrors.gamma 
                             ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300'
+                            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                         }`}
                         disabled={trainingStatus.status === "training"}
                       />
@@ -1786,7 +1786,7 @@ export default function MazeSolver() {
                       )}
                     </div>
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
                         Epsilon (ε) <span className="text-gray-400">- Exploration</span>
                       </label>
                       <Input
@@ -1802,7 +1802,7 @@ export default function MazeSolver() {
                           className={`bg-white h-8 text-sm transition-colors ${
                             validationErrors.epsilon 
                               ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                              : 'border-gray-300'
+                              : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                           }`}
                           disabled={trainingStatus.status === "training"}
                         />
@@ -1817,7 +1817,7 @@ export default function MazeSolver() {
                 {algorithm === "monte_carlo" && (
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
                         Gamma (γ) <span className="text-gray-400">- Discount Factor</span>
                       </label>
                       <Input
@@ -1833,7 +1833,7 @@ export default function MazeSolver() {
                         className={`bg-white h-8 text-sm transition-colors ${
                           validationErrors.gamma 
                             ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300'
+                            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                         }`}
                         disabled={trainingStatus.status === "training"}
                       />
@@ -1842,7 +1842,7 @@ export default function MazeSolver() {
                       )}
                     </div>
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
                         Epsilon (ε) <span className="text-gray-400">- Initial Exploration</span>
                       </label>
                       <Input
@@ -1858,7 +1858,7 @@ export default function MazeSolver() {
                         className={`bg-white h-8 text-sm transition-colors ${
                           validationErrors.epsilon 
                             ? 'border-red-500 border-2 focus:border-red-500 focus:ring-red-500' 
-                            : 'border-gray-300'
+                            : 'border-slate-300 focus:border-blue-500 focus:ring-blue-200'
                         }`}
                         disabled={trainingStatus.status === "training"}
                       />
@@ -1873,7 +1873,7 @@ export default function MazeSolver() {
                 {algorithm === "monte_carlo" && (
                   <div className="border-t pt-2 mt-2 border-gray-300 space-y-2">
                     <div>
-                      <label className="text-xs text-gray-600 mb-1 block">
+                      <label className="text-xs text-slate-700 font-medium mb-1 block">
                         MC Method <span className="text-gray-400">- Update Strategy</span>
                       </label>
                       <select
@@ -1888,7 +1888,7 @@ export default function MazeSolver() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-xs text-gray-600 mb-1 block">
+                        <label className="text-xs text-slate-700 font-medium mb-1 block">
                           ε Decay <span className="text-gray-400">- Per Episode</span>
                         </label>
                         <Input
@@ -1901,7 +1901,7 @@ export default function MazeSolver() {
                         />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-600 mb-1 block">
+                        <label className="text-xs text-slate-700 font-medium mb-1 block">
                           Min ε <span className="text-gray-400">- Lower Bound</span>
                         </label>
                         <Input
@@ -1923,16 +1923,16 @@ export default function MazeSolver() {
 
           {/* RIGHT COLUMN - Maze and Training Logs (appears first on large screens) */}
           <div className="space-y-3 order-2 lg:order-1">
-            <Card className="p-3 bg-white border-gray-300">
+            <Card className="p-3 bg-white/80 backdrop-blur-sm border-slate-200 shadow-lg shadow-indigo-100/50">
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-semibold font-sans text-black leading-7 bg-gradient-to-br from-gray-50 to-gray-100 py-2 px-3 rounded-lg shadow-sm flex-1 text-center">
-                  Agent&#39;s Environment [ 16 * 17 ]
+                <h2 className="text-xl font-semibold font-sans leading-7 bg-slate-900/90 backdrop-blur-sm text-white py-2 px-4 rounded-lg shadow-sm border border-slate-800/50 flex-1 text-center">
+                  Agent&#39;s Environment [ 16 × 17 ]
                 </h2>
                 <Button
                   onClick={generateRandomMaze}
                   variant="outline"
                   size="sm"
-                  className="ml-2 border-purple-300 hover:bg-purple-50 text-purple-700 hover:text-purple-800"
+                  className="ml-2 bg-teal-600/80 backdrop-blur-md text-black hover:bg-teal-700/90 border-teal-500/50 shadow-lg transition-all"
                   disabled={isAnimating || trainingStatus.status === "training"}
                   title={`Generate ${nextDifficulty.toUpperCase()} maze`}
                 >
@@ -1952,7 +1952,7 @@ export default function MazeSolver() {
                     }}
                     variant={isEditorMode ? "default" : "outline"}
                     size="sm"
-                    className={isEditorMode ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    className={isEditorMode ? "bg-slate-700/80 backdrop-blur-md text-white hover:bg-slate-800/90 shadow-lg border border-slate-600/50" : "bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700 shadow-sm"}
                     disabled={isAnimating || trainingStatus.status === "training"}
                   >
                     <Edit3 className="h-3 w-3 mr-1" />
@@ -1965,7 +1965,7 @@ export default function MazeSolver() {
                         onClick={() => setShowHeatmap(!showHeatmap)}
                         variant={showHeatmap ? "default" : "outline"}
                         size="sm"
-                        className={showHeatmap ? "bg-purple-600 hover:bg-purple-700" : ""}
+                        className={showHeatmap ? "bg-slate-700/80 backdrop-blur-md text-white hover:bg-slate-800/90 shadow-lg border border-slate-600/50" : "bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700 shadow-sm"}
                       >
                         {showHeatmap ? <EyeOff className="h-3 w-3 mr-1" /> : <Eye className="h-3 w-3 mr-1" />}
                         Q-Heatmap
@@ -1974,6 +1974,7 @@ export default function MazeSolver() {
                         onClick={() => setIs3DModalOpen(true)}
                         variant="outline"
                         size="sm"
+                        className="bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700 shadow-sm"
                       >
                         <Grid3x3 className="h-3 w-3 mr-1" />
                         3D View
@@ -1989,7 +1990,7 @@ export default function MazeSolver() {
                           onClick={startTraining}
                           disabled={trainingStatus.status === "training"}
                           size="sm"
-                          className="bg-gradient-to-r from-gray-900 to-black text-white hover:from-gray-800 hover:to-gray-900"
+                          className="bg-black/80 backdrop-blur-md text-white hover:bg-black shadow-lg border border-black/50 transition-all"
                         >
                           {trainingStatus.status === "training" ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -2010,7 +2011,7 @@ export default function MazeSolver() {
                             onClick={simulatePolicy}
                             disabled={isAnimating}
                             size="sm"
-                            className="bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-500 hover:to-green-600"
+                            className="bg-blue-700/80 backdrop-blur-md text-white hover:bg-blue-800/90 shadow-lg border border-blue-600/50 transition-all"
                           >
                             {isAnimating ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -2031,6 +2032,7 @@ export default function MazeSolver() {
                           onClick={resetEnvironment}
                           variant="outline"
                           size="sm"
+                          className="bg-amber-600/80 backdrop-blur-md text-black hover:bg-amber-700/90 shadow-lg border border-amber-500/50 transition-all"
                         >
                           <RotateCcw className="h-3 w-3" />
                         </Button>
@@ -2047,7 +2049,7 @@ export default function MazeSolver() {
                             onClick={fetchDetailedMetrics}
                             disabled={loadingMetrics}
                             size="sm"
-                            className="bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 text-white"
+                            className="bg-red-700/80 backdrop-blur-md text-white hover:bg-red-800/90 shadow-lg border border-red-600/50 transition-all"
                           >
                             {loadingMetrics ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -2066,21 +2068,21 @@ export default function MazeSolver() {
 
                 {/* Editor Tools */}
                 {isEditorMode && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 space-y-2">
+                  <div className="bg-slate-50/80 backdrop-blur-sm border border-slate-200 rounded-lg p-2 space-y-2 shadow-sm">
                     <div className="flex gap-1 flex-wrap">
                       <Button
                         onClick={() => setEditorTool('wall')}
                         variant={editorTool === 'wall' ? "default" : "outline"}
                         size="sm"
-                        className="h-7 text-xs"
+                        className={editorTool === 'wall' ? "h-7 text-xs bg-slate-600/80 backdrop-blur-md text-white hover:bg-slate-700/90 border border-slate-500/50 shadow-md" : "h-7 text-xs bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700"}
                       >
-                        🧱 Wall/Path
+                        🧱 Wall
                       </Button>
                       <Button
                         onClick={() => setEditorTool('start')}
                         variant={editorTool === 'start' ? "default" : "outline"}
                         size="sm"
-                        className="h-7 text-xs"
+                        className={editorTool === 'start' ? "h-7 text-xs bg-green-600/80 backdrop-blur-md text-white hover:bg-green-700/90 border border-green-500/50 shadow-md" : "h-7 text-xs bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700"}
                       >
                         🟢 Start
                       </Button>
@@ -2088,7 +2090,7 @@ export default function MazeSolver() {
                         onClick={() => setEditorTool('goal')}
                         variant={editorTool === 'goal' ? "default" : "outline"}
                         size="sm"
-                        className="h-7 text-xs"
+                        className={editorTool === 'goal' ? "h-7 text-xs bg-orange-600/80 backdrop-blur-md text-white hover:bg-orange-700/90 border border-orange-500/50 shadow-md" : "h-7 text-xs bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700"}
                       >
                         🎯 Goal
                       </Button>
@@ -2096,22 +2098,22 @@ export default function MazeSolver() {
                         onClick={() => setEditorTool('path')}
                         variant={editorTool === 'path' ? "default" : "outline"}
                         size="sm"
-                        className="h-7 text-xs"
+                        className={editorTool === 'path' ? "h-7 text-xs bg-purple-600/80 backdrop-blur-md text-white hover:bg-purple-700/90 border border-purple-500/50 shadow-md" : "h-7 text-xs bg-white/60 backdrop-blur-sm border-slate-300/60 hover:bg-white/80 text-slate-700"}
                       >
                         ✏️ Path
                       </Button>
-                      <Button onClick={saveMaze} variant="outline" size="sm" className="h-7 text-xs">
+                      <Button onClick={saveMaze} variant="outline" size="sm" className="h-7 text-xs bg-sky-600/80 backdrop-blur-md text-black hover:bg-sky-700/90 border-sky-500/50 shadow-md">
                         <Save className="h-3 w-3 mr-1" />
                         Save
                       </Button>
-                      <Button onClick={clearMaze} variant="outline" size="sm" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50">
+                      <Button onClick={clearMaze} variant="outline" size="sm" className="h-7 text-xs bg-red-600/80 backdrop-blur-md text-black hover:bg-red-700/90 border-red-500/50 shadow-md">
                         <X className="h-3 w-3 mr-1" />
                         Clear
                       </Button>
                     </div>
                     {savedMazes.length > 0 && (
                       <div className="max-h-20 overflow-y-auto">
-                        <div className="text-xs font-semibold mb-1">Saved Mazes:</div>
+                        <div className="text-xs font-semibold mb-1 text-slate-800">Saved Mazes:</div>
                         <div className="space-y-1">
                           {savedMazes.map((m, i) => (
                             <div key={i} className="flex justify-between items-center bg-white p-1 rounded text-xs">
@@ -2285,7 +2287,7 @@ export default function MazeSolver() {
                       losses={detailedMetrics.loss_history} 
                       totalEpisodes={detailedMetrics.loss_history.length}
                     />
-                    <div className="text-xs text-gray-500 mt-1">
+                    <div className="text-xs text-slate-600 mt-1">
                       Lower loss = better value approximation
                     </div>
                   </Card>
@@ -2299,22 +2301,22 @@ export default function MazeSolver() {
                   <div className="p-2.5 bg-gray-50 rounded-lg">
                     <div className="text-gray-600 font-medium mb-1 text-xs">Undiscounted Return</div>
                     <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_return.toFixed(2)}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Std: {detailedMetrics.detailed_metrics.std_return.toFixed(2)}</div>
+                    <div className="text-xs text-slate-600 mt-0.5">Std: {detailedMetrics.detailed_metrics.std_return.toFixed(2)}</div>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-lg">
                     <div className="text-gray-600 font-medium mb-1 text-xs">Discounted Return</div>
                     <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_discounted_return.toFixed(2)}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">With gamma decay</div>
+                    <div className="text-xs text-slate-600 mt-0.5">With gamma decay</div>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-lg">
                     <div className="text-gray-600 font-medium mb-1 text-xs">Avg Episode Length</div>
                     <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_episode_length.toFixed(1)}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">Min: {detailedMetrics.detailed_metrics.min_episode_length.toFixed(0)}</div>
+                    <div className="text-xs text-slate-600 mt-0.5">Min: {detailedMetrics.detailed_metrics.min_episode_length.toFixed(0)}</div>
                   </div>
                   <div className="p-2.5 bg-gray-50 rounded-lg">
                     <div className="text-gray-600 font-medium mb-1 text-xs">TD Error</div>
                     <div className="text-lg font-bold text-gray-900">{detailedMetrics.detailed_metrics.avg_td_error.toFixed(3)}</div>
-                    <div className="text-xs text-gray-500 mt-0.5">{detailedMetrics.detailed_metrics.avg_td_error === 0 ? 'N/A for MC' : 'Accuracy'}</div>
+                    <div className="text-xs text-slate-600 mt-0.5">{detailedMetrics.detailed_metrics.avg_td_error === 0 ? 'N/A for MC' : 'Accuracy'}</div>
                   </div>
                   <div className="p-2.5 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg border border-indigo-200">
                     <div className="text-indigo-700 font-medium mb-1 text-xs">Training Loss (MSE)</div>

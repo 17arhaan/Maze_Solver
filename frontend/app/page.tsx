@@ -2383,19 +2383,19 @@ export default function MazeSolver() {
 
       {/* 3D Q-Value Surface Plot Modal */}
       <Dialog open={is3DModalOpen} onOpenChange={setIs3DModalOpen}>
-        <DialogContent className="!max-w-[95vw] !w-[95vw] h-[90vh] !max-h-[90vh] overflow-hidden bg-white p-4">
+        <DialogContent className="!max-w-[95vw] !w-[95vw] h-[90vh] !max-h-[90vh] overflow-y-auto bg-white p-4">
           <DialogHeader className="pb-2">
             <DialogTitle className="text-xl font-bold text-gray-900">
               <Sparkles className="inline h-5 w-5 mr-2" />
               3D Q-Value Surface Visualization
             </DialogTitle>
             <DialogDescription>
-              Interactive 3D surface plot showing Q-values across the maze state space
+              Interactive 3D surface plot showing Q-values across the maze
             </DialogDescription>
           </DialogHeader>
 
-          {qTable && (
-            <div className="h-full w-full">
+          {qTable && qTable.length > 0 ? (
+            <div className="w-full" style={{ height: '700px' }}>
               <Plot
                 data={[
                   {
@@ -2403,8 +2403,9 @@ export default function MazeSolver() {
                     z: Array.from({ length: 16 }, (_, row) =>
                       Array.from({ length: 17 }, (_, col) => {
                         const stateIndex = row * 17 + col
-                        if (maze[row][col] === 0) return null
+                        if (maze[row][col] === 0) return 0
                         const qValues = qTable[stateIndex]
+                        if (!qValues || qValues.length === 0) return 0
                         return Math.max(...qValues)
                       })
                     ),
@@ -2438,7 +2439,7 @@ export default function MazeSolver() {
                       eye: { x: 1.5, y: 1.5, z: 1.3 }
                     }
                   },
-                  margin: { l: 0, r: 0, t: 40, b: 0 },
+                  margin: { l: 0, r: 0, t: 50, b: 0 },
                   paper_bgcolor: 'white',
                   plot_bgcolor: 'white',
                 }}
@@ -2448,8 +2449,13 @@ export default function MazeSolver() {
                   modeBarButtonsToRemove: ['toImage'],
                   responsive: true
                 }}
-                style={{ width: '100%', height: 'calc(90vh - 120px)' }}
+                style={{ width: '100%', height: '100%' }}
+                useResizeHandler={true}
               />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-96">
+              <p className="text-gray-500">No Q-table data available. Complete training first.</p>
             </div>
           )}
         </DialogContent>

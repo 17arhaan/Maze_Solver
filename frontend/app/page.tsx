@@ -109,6 +109,8 @@ export default function MazeSolver() {
   const [isEditorMode, setIsEditorMode] = useState(false)
   const [editorTool, setEditorTool] = useState<'wall' | 'start' | 'goal' | 'path'>('wall')
   const [savedMazes, setSavedMazes] = useState<{name: string, maze: number[][], complexity: string}[]>([])
+  const [isDrawing, setIsDrawing] = useState(false)
+  const [drawValue, setDrawValue] = useState<number | null>(null)
   
   // Visualization States
   const [showHeatmap, setShowHeatmap] = useState(false)
@@ -148,6 +150,20 @@ export default function MazeSolver() {
       setSavedMazes(JSON.parse(saved))
     }
   }, [])
+
+  // Global mouse up listener for drag drawing
+  useEffect(() => {
+    const handleUp = () => {
+      if (isDrawing) {
+        setIsDrawing(false)
+        setDrawValue(null)
+        setPathLength(estimatePathLength(maze))
+      }
+    }
+    
+    window.addEventListener('mouseup', handleUp)
+    return () => window.removeEventListener('mouseup', handleUp)
+  }, [isDrawing, maze])
 
   // Set optimal parameters based on algorithm and maze complexity
   const setOptimalParameters = (algo: Algorithm, complexity: "easy" | "medium" | "hard") => {
@@ -1281,33 +1297,55 @@ export default function MazeSolver() {
   }
 
   // ========== MAZE EDITOR FUNCTIONS ==========
-  const handleCellClick = (row: number, col: number) => {
+  const handleCellMouseDown = (row: number, col: number) => {
     if (!isEditorMode || isAnimating || trainingStatus.status === "training") return
+    
+    setIsDrawing(true)
+    
+    // Determine what value to draw based on tool
+    if (editorTool === 'wall') {
+      // Toggle: if current cell is wall (0), draw paths (1), otherwise draw walls (0)
+      setDrawValue(maze[row][col] === 0 ? 1 : 0)
+    } else if (editorTool === 'path') {
+      setDrawValue(1)
+    } else if (editorTool === 'start') {
+      setDrawValue(2)
+    } else if (editorTool === 'goal') {
+      setDrawValue(3)
+    }
+    
+    // Apply to first cell
+    applyDrawing(row, col)
+  }
+
+  const handleCellMouseEnter = (row: number, col: number) => {
+    if (!isDrawing || !isEditorMode) return
+    applyDrawing(row, col)
+  }
+
+  const applyDrawing = (row: number, col: number) => {
+    if (drawValue === null) return
     
     const newMaze = maze.map(r => [...r])
     
-    if (editorTool === 'wall') {
-      // Toggle wall (0) or path (1)
-      newMaze[row][col] = newMaze[row][col] === 0 ? 1 : 0
-    } else if (editorTool === 'start') {
-      // Set start position (value 2) - clear old start
+    if (editorTool === 'start') {
+      // Clear old start
       newMaze.forEach((r, i) => r.forEach((c, j) => {
         if (c === 2) newMaze[i][j] = 1
       }))
       newMaze[row][col] = 2
     } else if (editorTool === 'goal') {
-      // Set goal position (value 3) - clear old goal
+      // Clear old goal
       newMaze.forEach((r, i) => r.forEach((c, j) => {
         if (c === 3) newMaze[i][j] = 1
       }))
       newMaze[row][col] = 3
-    } else if (editorTool === 'path') {
-      // Draw path
-      newMaze[row][col] = 1
+    } else {
+      // For wall and path tools, just set the value
+      newMaze[row][col] = drawValue
     }
     
     setMaze(newMaze)
-    setPathLength(estimatePathLength(newMaze))
     // Reset training when maze is edited
     setTrainingStatus({ status: "idle" })
     setAgentPath([])
@@ -1597,8 +1635,8 @@ export default function MazeSolver() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black p-3">
-      <div className="max-w-7xl mx-auto space-y-3">
+    <div className="min-h-screen bg-gray-300 text-black p-5 overscroll-none">
+      <div className="max-w-7xl mx-auto space-y-3 overscroll-none">
         <div className="text-center space-y-1">
           <h1 className="font-bold text-black text-xl underline font-sans tracking-widest leading-9">
             RL MAZE SOLVER{" "}
@@ -1881,70 +1919,6 @@ export default function MazeSolver() {
               </div>
             </Card>
 
-            {trainingStatus.status !== "idle" && (
-              <Card className="p-4 bg-white border-gray-300">
-                <div className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-lg border-2 border-gray-200 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-bold text-gray-800">Training Status</span>
-                    <span
-                      className={`text-xs font-bold px-3 py-1.5 rounded-full shadow-sm ${
-                        trainingStatus.status === "completed"
-                          ? "bg-green-500 text-white"
-                          : trainingStatus.status === "error"
-                            ? "bg-red-500 text-white"
-                            : "bg-blue-500 text-white animate-pulse"
-                      }`}
-                    >
-                      {trainingStatus.status.toUpperCase()}
-                    </span>
-                  </div>
-                  {trainingStatus.episode && trainingStatus.total_episodes && (
-                    <div>
-                      <div className="flex items-center justify-between text-sm mb-2">
-                        <span className="text-gray-700 font-semibold">Progress</span>
-                        <span className="text-gray-900 font-bold">
-                          {trainingStatus.episode} / {trainingStatus.total_episodes}
-                        </span>
-                      </div>
-                      <div className="relative w-full bg-gray-300 rounded-full h-3 overflow-hidden shadow-inner">
-                        <div
-                          className={`h-3 rounded-full transition-all duration-500 ease-out ${
-                            trainingStatus.status === "completed"
-                              ? "bg-gradient-to-r from-green-400 to-green-600"
-                              : trainingStatus.status === "error"
-                              ? "bg-gradient-to-r from-red-400 to-red-600"
-                              : "bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600"
-                          }`}
-                          style={{
-                            width: `${(trainingStatus.episode / trainingStatus.total_episodes) * 100}%`,
-                          }}
-                        >
-                          {trainingStatus.status === "training" && (
-                            <div 
-                              className="absolute inset-0 opacity-30 animate-shimmer"
-                              style={{
-                                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.6) 50%, transparent 100%)',
-                                backgroundSize: '200% 100%'
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center mt-2">
-                        <span className="text-xs font-semibold text-gray-600">
-                          {Math.round((trainingStatus.episode / trainingStatus.total_episodes) * 100)}% Complete
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  {trainingStatus.message && (
-                    <p className="text-xs text-gray-600 mt-3 italic bg-gray-50 p-2 rounded border border-gray-200">
-                      {trainingStatus.message}
-                    </p>
-                  )}
-                </div>
-              </Card>
-            )}
           </div>
 
           {/* RIGHT COLUMN - Maze and Training Logs (appears first on large screens) */}
@@ -1965,18 +1939,6 @@ export default function MazeSolver() {
                   <Shuffle className="h-4 w-4" />
                 </Button>
               </div>
-              
-              {pathLength > 0 && (
-                <div className="mb-2 text-center">
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    mazeComplexity === "easy" ? "bg-green-100 text-green-700" :
-                    mazeComplexity === "medium" ? "bg-yellow-100 text-yellow-700" :
-                    "bg-red-100 text-red-700"
-                  }`}>
-                    {mazeComplexity.toUpperCase()} • Shortest Path: {pathLength} steps
-                  </span>
-                </div>
-              )}
 
               {/* Editor Mode Controls */}
               <div className="mb-3 space-y-2">
@@ -2138,19 +2100,9 @@ export default function MazeSolver() {
                       >
                         ✏️ Path
                       </Button>
-                    </div>
-                    <div className="flex gap-1 flex-wrap">
                       <Button onClick={saveMaze} variant="outline" size="sm" className="h-7 text-xs">
                         <Save className="h-3 w-3 mr-1" />
                         Save
-                      </Button>
-                      <Button onClick={exportMaze} variant="outline" size="sm" className="h-7 text-xs">
-                        <Download className="h-3 w-3 mr-1" />
-                        Export
-                      </Button>
-                      <Button onClick={importMaze} variant="outline" size="sm" className="h-7 text-xs">
-                        <Upload className="h-3 w-3 mr-1" />
-                        Import
                       </Button>
                       <Button onClick={clearMaze} variant="outline" size="sm" className="h-7 text-xs text-red-600 border-red-300 hover:bg-red-50">
                         <X className="h-3 w-3 mr-1" />
@@ -2178,8 +2130,39 @@ export default function MazeSolver() {
                 )}
               </div>
 
-              <div className="grid grid-cols-17 gap-1 bg-gradient-to-br from-gray-100 to-gray-200 p-3 rounded-xl shadow-inner relative">
-                {maze.map((row, rowIndex) =>
+              <div className="flex gap-3 items-stretch">
+                {/* Vertical Progress Bar - Always Visible */}
+                <div className="relative w-2 bg-gray-800 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className={`absolute bottom-0 w-full transition-all duration-500 ease-out ${
+                      trainingStatus.status === "idle" && !isAnimating
+                        ? "bg-black"
+                        : trainingStatus.status === "training"
+                        ? "bg-yellow-400 animate-pulse"
+                        : isAnimating
+                        ? "bg-green-400 animate-pulse"
+                        : simulationFailed
+                        ? "bg-red-500 animate-pulse"
+                        : goalReached
+                        ? "bg-gradient-to-t from-green-400 via-blue-500 to-purple-600 animate-pulse"
+                        : trainingStatus.status === "completed"
+                        ? "bg-gradient-to-t from-green-400 to-green-600"
+                        : trainingStatus.status === "error"
+                        ? "bg-red-500 animate-pulse"
+                        : "bg-black"
+                    }`}
+                    style={{
+                      height: trainingStatus.episode && trainingStatus.total_episodes
+                        ? `${(trainingStatus.episode / trainingStatus.total_episodes) * 100}%`
+                        : isAnimating || goalReached || simulationFailed
+                        ? '100%'
+                        : '100%',
+                    }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-17 gap-1 bg-gradient-to-br from-gray-100 to-gray-200 p-3 rounded-xl shadow-inner relative flex-1">
+                  {maze.map((row, rowIndex) =>
                   row.map((_, colIndex) => {
                     const cellColor = getCellColor(rowIndex, colIndex)
                     const showArrow = !isAnimating &&
@@ -2199,9 +2182,10 @@ export default function MazeSolver() {
                     return (
                       <div
                         key={`${rowIndex}-${colIndex}`}
-                        onClick={() => handleCellClick(rowIndex, colIndex)}
+                        onMouseDown={() => handleCellMouseDown(rowIndex, colIndex)}
+                        onMouseEnter={() => handleCellMouseEnter(rowIndex, colIndex)}
                         className={`aspect-square ${displayClassName} rounded flex items-center justify-center text-xs font-bold transition-all duration-200 ease-in-out relative ${
-                          isEditorMode ? 'cursor-pointer hover:ring-2 hover:ring-blue-400' : ''
+                          isEditorMode ? 'cursor-pointer hover:ring-2 hover:ring-blue-400 select-none' : ''
                         } ${maze[rowIndex][colIndex] === 0 && showHeatmap ? 'bg-black' : ''}`}
                         style={displayStyle}
                       >
@@ -2220,7 +2204,8 @@ export default function MazeSolver() {
                       </div>
                     )
                   }),
-                )}
+                  )}
+                </div>
               </div>
             </Card>
           </div>

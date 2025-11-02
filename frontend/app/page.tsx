@@ -178,8 +178,8 @@ export default function MazeSolver() {
         }
       }
       
-      // Use DIFFERENT generation strategy based on attempt number for MORE variety
-      const strategy = attempts % 3
+      // Use RANDOM generation strategy for MAXIMUM variety
+      const strategy = Math.floor(Math.random() * 4)  // 0-3: four different strategies
       
       if (strategy === 0) {
         // Strategy 1: Classic recursive backtracking DFS
@@ -210,46 +210,102 @@ export default function MazeSolver() {
           }
         }
         
-        // Start carving from RANDOM position
-        const startRow = Math.floor(Math.random() * 6) * 2 + 1
-        const startCol = Math.floor(Math.random() * 6) * 2 + 1
-        carve(startRow, startCol)
+        // Start carving from TRULY RANDOM position (any odd coordinate)
+        const possibleStarts = []
+        for (let r = 1; r < rows - 1; r += 2) {
+          for (let c = 1; c < cols - 1; c += 2) {
+            possibleStarts.push([r, c])
+          }
+        }
+        const randomStart = possibleStarts[Math.floor(Math.random() * possibleStarts.length)]
+        carve(randomStart[0], randomStart[1])
         
       } else if (strategy === 1) {
         // Strategy 2: Random walk from multiple starting points
-        const numStarts = Math.floor(Math.random() * 3) + 2  // 2-4 starting points
+        const numStarts = Math.floor(Math.random() * 4) + 3  // 3-6 starting points (more variety)
         for (let s = 0; s < numStarts; s++) {
           let r = Math.floor(Math.random() * (rows - 2)) + 1
           let c = Math.floor(Math.random() * (cols - 2)) + 1
           
-          // Random walk from each starting point
-          const walkLength = Math.floor(Math.random() * 40) + 20
+          // Random walk from each starting point with VARIABLE length
+          const walkLength = Math.floor(Math.random() * 60) + 30  // 30-90 steps
           for (let step = 0; step < walkLength; step++) {
             newMaze[r][c] = 1
             
-            // Move in random direction
+            // Move in random direction with bias (sometimes prefer continuing same direction)
             const direction = Math.floor(Math.random() * 4)
+            const prevR = r
+            const prevC = c
+            
             if (direction === 0 && r > 1) r--
             else if (direction === 1 && r < rows - 2) r++
             else if (direction === 2 && c > 1) c--
             else if (direction === 3 && c < cols - 2) c++
+            
+            // Sometimes backtrack or create branches
+            if (Math.random() < 0.15) {
+              r = prevR
+              c = prevC
+            }
           }
         }
         
-      } else {
-        // Strategy 3: Grid-based with random walls removed
-        // Create a grid pattern
-        for (let r = 1; r < rows - 1; r += 2) {
-          for (let c = 1; c < cols - 1; c += 2) {
+      } else if (strategy === 2) {
+        // Strategy 3: Grid-based with VARIABLE density
+        // Create a grid pattern with random spacing
+        const spacing = Math.random() < 0.5 ? 2 : 3  // Vary grid density
+        for (let r = 1; r < rows - 1; r += spacing) {
+          for (let c = 1; c < cols - 1; c += spacing) {
             newMaze[r][c] = 1
-            // Randomly connect to neighbors
-            if (c < cols - 2 && Math.random() < 0.5) {
+            // Randomly connect to neighbors with VARIABLE probability
+            const connectionProb = Math.random() * 0.4 + 0.3  // 0.3-0.7
+            if (c < cols - 2 && Math.random() < connectionProb) {
               newMaze[r][c + 1] = 1
             }
-            if (r < rows - 2 && Math.random() < 0.5) {
+            if (r < rows - 2 && Math.random() < connectionProb) {
               newMaze[r + 1][c] = 1
             }
+            // Sometimes add diagonal connections
+            if (r < rows - 2 && c < cols - 2 && Math.random() < 0.2) {
+              newMaze[r + 1][c + 1] = 1
+            }
           }
+        }
+      } else {
+        // Strategy 4: Cellular Automata-inspired random generation
+        // Fill randomly then smooth out
+        for (let r = 1; r < rows - 1; r++) {
+          for (let c = 1; c < cols - 1; c++) {
+            // Random initial fill (45% chance)
+            if (Math.random() < 0.45) {
+              newMaze[r][c] = 1
+            }
+          }
+        }
+        
+        // Smooth pass: remove isolated cells, fill enclosed spaces
+        for (let pass = 0; pass < 2; pass++) {
+          const tempMaze = newMaze.map(row => [...row])
+          for (let r = 1; r < rows - 1; r++) {
+            for (let c = 1; c < cols - 1; c++) {
+              const neighbors = [
+                newMaze[r-1]?.[c] || 0,
+                newMaze[r+1]?.[c] || 0,
+                newMaze[r]?.[c-1] || 0,
+                newMaze[r]?.[c+1] || 0
+              ].filter(n => n === 1).length
+              
+              // If 3+ neighbors are paths, make this a path
+              if (neighbors >= 3) {
+                tempMaze[r][c] = 1
+              }
+              // If only 1 neighbor, might remove (creates cleaner paths)
+              else if (neighbors === 1 && Math.random() < 0.3) {
+                tempMaze[r][c] = 0
+              }
+            }
+          }
+          newMaze.splice(0, newMaze.length, ...tempMaze)
         }
       }
       
@@ -365,8 +421,8 @@ export default function MazeSolver() {
       const cols = 17
       generatedMaze = Array(rows).fill(0).map(() => Array(cols).fill(0))
       
-      // Create random path pattern (not always L-shaped)
-      const pathType = Math.floor(Math.random() * 3)
+      // Create random path pattern with MORE variety
+      const pathType = Math.floor(Math.random() * 5)  // 0-4: five different fallback patterns
       
       if (pathType === 0) {
         // L-shaped: Vertical then horizontal
@@ -395,8 +451,8 @@ export default function MazeSolver() {
         for (let c = Math.min(currentCol, 15); c <= 15; c++) {
           generatedMaze[15][c] = 1
         }
-      } else {
-        // Diagonal-ish pattern
+      } else if (pathType === 2) {
+        // Diagonal pattern
         for (let step = 0; step <= 15; step++) {
           const r = Math.min(15, Math.floor(step * 15 / 15))
           const c = Math.min(15, Math.max(1, step))
@@ -404,6 +460,51 @@ export default function MazeSolver() {
           if (r > 0) generatedMaze[r-1][c] = 1
           if (c > 1) generatedMaze[r][c-1] = 1
         }
+      } else if (pathType === 3) {
+        // Spiral pattern from outside to inside
+        let top = 1, bottom = 14, left = 1, right = 15
+        while (top <= bottom && left <= right) {
+          // Top row
+          for (let c = left; c <= right; c++) generatedMaze[top][c] = 1
+          top++
+          // Right column
+          for (let r = top; r <= bottom; r++) generatedMaze[r][right] = 1
+          right--
+          // Bottom row
+          if (top <= bottom) {
+            for (let c = right; c >= left; c--) generatedMaze[bottom][c] = 1
+            bottom--
+          }
+          // Left column
+          if (left <= right) {
+            for (let r = bottom; r >= top; r--) generatedMaze[r][left] = 1
+            left++
+          }
+        }
+      } else {
+        // Random branching path
+        const branches = Math.floor(Math.random() * 3) + 2  // 2-4 branches
+        for (let b = 0; b < branches; b++) {
+          let r = Math.floor(Math.random() * (rows - 4)) + 2
+          let c = Math.floor(Math.random() * (cols - 4)) + 2
+          const branchLength = Math.floor(Math.random() * 25) + 15
+          
+          for (let i = 0; i < branchLength; i++) {
+            generatedMaze[r][c] = 1
+            // Random walk with some persistence
+            const dir = Math.floor(Math.random() * 4)
+            if (dir === 0 && r > 1) r--
+            else if (dir === 1 && r < rows - 2) r++
+            else if (dir === 2 && c > 1) c--
+            else if (dir === 3 && c < cols - 2) c++
+          }
+        }
+        // Connect to start and goal
+        generatedMaze[0][1] = 1
+        generatedMaze[1][1] = 1
+        generatedMaze[15][15] = 1
+        generatedMaze[14][15] = 1
+        generatedMaze[15][14] = 1
       }
       
       // Add complexity based on target with MORE randomization

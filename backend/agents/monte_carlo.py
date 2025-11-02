@@ -78,11 +78,19 @@ class MonteCarloAgent:
         return episode, total_reward, False
 
     def calculate_returns(self, episode):
+        """
+        Calculate returns G_t for each step in the episode.
+        Uses backward iteration: G ← γG + R_{t+1}
+        
+        Following Sutton & Barto's First-Visit MC algorithm:
+        Loop for each step of episode, t = T-1, T-2, ..., 0:
+            G ← γG + R_{t+1}
+        """
         G = 0
         returns = []
         for t in reversed(range(len(episode))):
             state, action, reward = episode[t]
-            G = reward + self.gamma * G
+            G = reward + self.gamma * G  # G ← γG + R_{t+1}
             returns.insert(0, G)
         return returns
 
@@ -93,15 +101,29 @@ class MonteCarloAgent:
             return self._every_visit_mc(episode, returns)
 
     def _first_visit_mc(self, episode, returns):
-        visited = set()
+        """
+        First-Visit Monte Carlo: Only update Q-value on FIRST occurrence of (s,a).
+        
+        Following Sutton & Barto's algorithm:
+        Unless S_t appears in S_0, S_1, ..., S_{t-1}:
+            Append G to Returns(S_t)
+            V(S_t) ← average(Returns(S_t))
+        
+        Adapted for Q-values: Tracks (state, action) pairs instead of just states.
+        """
+        visited = set()  # Track which (state, action) pairs we've already updated
         episode_squared_errors = []
+        
         for t, (state, action, _) in enumerate(episode):
             state_action = (state, action)
+            # Only update if this is the FIRST time we see this (state, action) pair
             if state_action not in visited:
                 visited.add(state_action)
                 old_q = self.Q[state, action]
+                # Append G to Returns(S_t, A_t)
                 self.returns[state][action].append(returns[t])
                 self.visit_counts[state, action] += 1
+                # Q(S_t, A_t) ← average(Returns(S_t, A_t))
                 self.Q[state, action] = np.mean(self.returns[state][action])
                 # Calculate squared error (loss) between old and new Q-value
                 prediction_error = returns[t] - old_q
@@ -109,11 +131,25 @@ class MonteCarloAgent:
         return episode_squared_errors
 
     def _every_visit_mc(self, episode, returns):
+        """
+        Every-Visit Monte Carlo: Update Q-value on EVERY occurrence of (s,a).
+        
+        Unlike First-Visit, this does NOT check if the state was visited before.
+        If State X appears twice in an episode, BOTH returns are recorded.
+        
+        Example from slides:
+        - State X appears at step 5 (return +45) and step 15 (return +20)
+        - First-Visit: Only records +45
+        - Every-Visit: Records both +45 and +20
+        """
         episode_squared_errors = []
+        
         for t, (state, action, _) in enumerate(episode):
             old_q = self.Q[state, action]
+            # Append G to Returns(S_t, A_t) - no "first visit" check
             self.returns[state][action].append(returns[t])
             self.visit_counts[state, action] += 1
+            # Q(S_t, A_t) ← average(Returns(S_t, A_t))
             self.Q[state, action] = np.mean(self.returns[state][action])
             # Calculate squared error (loss) between old and new Q-value
             prediction_error = returns[t] - old_q

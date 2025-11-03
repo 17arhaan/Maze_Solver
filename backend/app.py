@@ -34,13 +34,10 @@ async def startup_event():
 
 app.add_middleware(
     CORSMiddleware,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_origins=[
         "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://frontend-8lzm2mzyl-arhaan-girdhars.vercel.app",
-        "https://frontend-5q2e6m12y-arhaan-girdhars.vercel.app",
-        "https://frontend-kdvu8uii3-arhaan-girdhars.vercel.app",
-        "https://*.vercel.app"
+        "http://127.0.0.1:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],

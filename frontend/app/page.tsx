@@ -9,8 +9,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Loader2, Play, RotateCcw, TrendingUp, Shuffle, BarChart3, Edit3, Save, Upload, Download, Grid3x3, Eye, EyeOff, Sparkles, X } from "lucide-react"
 import dynamic from 'next/dynamic'
 
-// Dynamic import for Plotly to avoid SSR issues
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false })
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 type Algorithm = "q_learning" | "monte_carlo" | "sarsa"
 
@@ -967,7 +968,7 @@ export default function MazeSolver() {
       // Flatten maze for backend (convert 2D to 1D array)
       const flatMaze = maze.flat()
       
-      const response = await fetch("http://localhost:8000/train", {
+      const response = await fetch(`${API_URL}/train`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1002,7 +1003,7 @@ export default function MazeSolver() {
     if (!jobId) return
     
     try {
-      const response = await fetch(`http://localhost:8000/status/${jobId}`)
+      const response = await fetch(`${API_URL}/status/${jobId}`)
       const data: BackendStatus = await response.json()
       
       // Add training logs at milestones
@@ -1074,7 +1075,7 @@ export default function MazeSolver() {
 
   const resetEnvironment = async () => {
     try {
-      await fetch("http://localhost:8000/reset", { method: "POST" })
+      await fetch(`${API_URL}/reset`, { method: "POST" })
       setTrainingStatus({ status: "idle" })
       setAgentPath([])
       setJobId(null)
@@ -1100,7 +1101,7 @@ export default function MazeSolver() {
 
     setLoadingMetrics(true)
     try {
-      const response = await fetch(`http://localhost:8000/metrics/${jobId}`)
+      const response = await fetch(`${API_URL}/metrics/${jobId}`)
       const data: MetricsResponse = await response.json()
       
       if (data.status === "finished" && data.detailed_metrics) {

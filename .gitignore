@@ -2,6 +2,20 @@
 # ROOT .gitignore for Maze Solver Project
 # ===================================
 
+# ============ Environment Variables ============
+.env
+.env.local
+.env.production
+.env.development
+.env*.local
+frontend/.env*
+backend/.env*
+!*.env.example
+
+# ============ Server Logs ============
+backend.log
+frontend.log
+
 # ============ Python Backend ============
 
 # Virtual Environment

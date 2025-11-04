@@ -8,7 +8,7 @@
 
 ## 🗺️ Overview
 
-**Maze Solver** is a reinforcement learning project that explores how an agent can learn to navigate a maze environment through trial-and-error.
+**Maze Solver** is a reinforcement learning project that explores how an agent learns to navigate a maze environment through trial-and-error.
 The maze is modeled as a **Markov Decision Process (MDP)**, and the project implements and compares three core reinforcement learning algorithms:
 
 * **Q-Learning** – off-policy Temporal Difference control.

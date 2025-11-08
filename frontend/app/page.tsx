@@ -1673,7 +1673,7 @@ export default function MazeSolver() {
           <h1 className="font-bold text-black text-2xl font-sans tracking-wider leading-10">
             RL MAZE SOLVER
           </h1>
-          {/* <p className="text-xs text-slate-600 italic font-medium">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p> */}
+          <p className="text-xs text-slate-600 italic font-medium">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p>
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">

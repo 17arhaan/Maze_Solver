@@ -899,12 +899,17 @@ export default function MazeSolver() {
         }
       }
       
-      // Ensure start and goal
+      // Ensure start and goal are set as paths first, then mark them
       generatedMaze[0][1] = 1
       generatedMaze[15][15] = 1
       
       pathLen = estimatePathLength(generatedMaze)
     }
+    
+    // Ensure start and goal positions are always set correctly (2 = start, 3 = goal)
+    // This must be done after all generation logic to ensure they're not overwritten
+    generatedMaze[0][1] = 2  // Start position
+    generatedMaze[15][15] = 3  // Goal position
     
     // Determine actual complexity (match the generation thresholds)
     let actualComplexity: "easy" | "medium" | "hard"
@@ -1306,7 +1311,9 @@ export default function MazeSolver() {
     // Determine what value to draw based on tool
     if (editorTool === 'wall') {
       // Toggle: if current cell is wall (0), draw paths (1), otherwise draw walls (0)
-      setDrawValue(maze[row][col] === 0 ? 1 : 0)
+      // For start/goal positions (2/3), treat them as paths and draw walls
+      const cellValue = maze[row][col]
+      setDrawValue(cellValue === 0 ? 1 : 0)
     } else if (editorTool === 'path') {
       setDrawValue(1)
     } else if (editorTool === 'start') {
@@ -1325,9 +1332,8 @@ export default function MazeSolver() {
   }
 
   const applyDrawing = (row: number, col: number) => {
-    if (drawValue === null) return
-    
     const newMaze = maze.map(r => [...r])
+    const currentCellValue = newMaze[row][col]
     
     if (editorTool === 'start') {
       // Clear old start
@@ -1341,9 +1347,34 @@ export default function MazeSolver() {
         if (c === 3) newMaze[i][j] = 1
       }))
       newMaze[row][col] = 3
-    } else {
-      // For wall and path tools, just set the value
-      newMaze[row][col] = drawValue
+    } else if (editorTool === 'wall') {
+      // For wall tool: use drawValue set at mouse down (toggles based on initial cell)
+      // If drawValue is null (edge case), toggle based on current cell state
+      if (drawValue !== null) {
+        // Use the toggle value determined at mouse down
+        // This preserves the original toggle behavior: if you start on a wall, you're erasing (drawing paths)
+        // If you start on a path, you're drawing walls
+        // If placing on start/goal, convert to path first, then apply the toggle
+        if (currentCellValue === 2 || currentCellValue === 3) {
+          // Start/goal positions should be converted to paths first, then apply wall toggle
+          newMaze[row][col] = drawValue === 0 ? 0 : 1
+        } else {
+          newMaze[row][col] = drawValue
+        }
+      } else {
+        // Fallback: toggle based on current cell state
+        // Handle start/goal positions by converting them to paths first
+        if (currentCellValue === 2 || currentCellValue === 3) {
+          newMaze[row][col] = 1
+        } else {
+          newMaze[row][col] = currentCellValue === 0 ? 1 : 0
+        }
+      }
+    } else if (editorTool === 'path') {
+      // For path tool, just set the value
+      if (drawValue !== null) {
+        newMaze[row][col] = drawValue
+      }
     }
     
     setMaze(newMaze)
@@ -1642,7 +1673,7 @@ export default function MazeSolver() {
           <h1 className="font-bold text-black text-2xl font-sans tracking-wider leading-10">
             RL MAZE SOLVER
           </h1>
-          <p className="text-xs text-slate-600 italic font-medium">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p>
+          {/* <p className="text-xs text-slate-600 italic font-medium">Arhaan Girdhar - 220962050 | Anbar Althaf - 220962051 </p> */}
         </div>
 
         <div className="grid lg:grid-cols-2 gap-4">
